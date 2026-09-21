@@ -1,0 +1,644 @@
+@import "tailwindcss";
+
+:root {
+  /* Soft pastel enterprise theme matching inspiration (Clinexa / Edem Medicover aesthetic) */
+  --color-bg: #edf2f9;
+  --color-surface: #ffffff;
+  --color-surface-2: #f8fafc;
+  --color-surface-elevated: #ffffff;
+  --color-surface-elevated-hover: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  --color-text-faint: #94a3b8;
+
+  /* Brand mark + primary CTA (Royal Indigo / Blue) */
+  --color-ink: #1e293b;
+  --color-ink-hover: #0f172a;
+  --color-brand: #4361ee;
+  --color-brand-hover: #3b52d9;
+
+  /* Accent: vibrant fintech indigo & emerald */
+  --color-accent: #4361ee;
+  --color-accent-hover: #3a56d4;
+  --color-accent-soft: #eef2ff;
+  --color-accent-fg: #ffffff;
+  --color-lime: #10b981;
+
+  --color-warning: #f59e0b;
+  --color-warning-soft: #fffbeb;
+  --color-danger: #f43f5e;
+  --color-danger-soft: #fff1f2;
+  --color-success: #10b981;
+  --color-success-soft: #ecfdf5;
+
+  --shadow-card: 0 2px 10px -2px rgba(15, 23, 42, 0.04), 0 1px 3px -1px rgba(15, 23, 42, 0.02);
+  --shadow-floating: 0 12px 30px -6px rgba(30, 41, 59, 0.08), 0 4px 12px -2px rgba(30, 41, 59, 0.04);
+  --radius-card: 24px;
+  --font-heading: var(--font-sans);
+}
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-heading: var(--font-heading);
+  --font-mono: var(--font-mono);
+
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-2: var(--color-surface-2);
+  --color-surface-elevated: var(--color-surface-elevated);
+  --color-surface-elevated-hover: var(--color-surface-elevated-hover);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+  --color-text: var(--color-text);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-faint: var(--color-text-faint);
+
+  --color-sidebar: var(--color-sidebar);
+  --color-sidebar-2: var(--color-sidebar-2);
+  --color-sidebar-border: var(--color-sidebar-border);
+  --color-sidebar-fg: var(--color-sidebar-fg);
+  --color-sidebar-fg-muted: var(--color-sidebar-fg-muted);
+  --color-sidebar-fg-active: var(--color-sidebar-fg-active);
+  --color-sidebar-active-bg: var(--color-sidebar-active-bg);
+
+  --color-ink: var(--color-ink);
+  --color-ink-hover: var(--color-ink-hover);
+
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-accent-fg: var(--color-accent-fg);
+  --color-lime: var(--color-lime);
+
+  --color-warning: var(--color-warning);
+  --color-warning-soft: var(--color-warning-soft);
+  --color-danger: var(--color-danger);
+  --color-danger-soft: var(--color-danger-soft);
+  --color-success: var(--color-success);
+  --color-success-soft: var(--color-success-soft);
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-feature-settings: "ss01" 1, "ss02" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6, .font-heading {
+  font-family: var(--font-heading, var(--font-sans), system-ui, sans-serif);
+}
+
+.font-numeric {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-interactive {
+  cursor: pointer;
+}
+
+.card-interactive:hover {
+  box-shadow: 0 6px 20px -4px rgb(0 0 0 / 0.08), 0 2px 6px -2px rgb(0 0 0 / 0.04);
+  border-color: var(--color-border-strong);
+  transform: translateY(-1px);
+}
+
+.glass-panel {
+  background: var(--color-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+  color: var(--color-text);
+}
+
+.dark .glass-panel {
+  background: rgba(15, 23, 42, 0.78) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #f8fafc !important;
+}
+
+.glass-card {
+  background: var(--color-surface);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  color: var(--color-text);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark .glass-card {
+  background: rgba(15, 23, 42, 0.72) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #f8fafc !important;
+}
+
+.glass-card-interactive {
+  cursor: pointer;
+}
+
+.glass-card-interactive:hover {
+  box-shadow: 0 8px 25px -4px rgba(15, 23, 42, 0.08), 0 3px 8px -2px rgba(15, 23, 42, 0.04);
+  border-color: #cbd5e1;
+  transform: translateY(-1.5px);
+}
+
+.ambient-canvas {
+  background-color: #edf2f9;
+  background-image: 
+    radial-gradient(at 10% 10%, rgba(67, 97, 238, 0.05) 0px, transparent 40%),
+    radial-gradient(at 90% 90%, rgba(16, 185, 129, 0.04) 0px, transparent 40%),
+    radial-gradient(at 50% 50%, rgba(240, 244, 253, 1) 0px, transparent 100%);
+  min-height: 100vh;
+}
+
+.pill-surface {
+  background: #ffffff;
+  border-radius: 28px;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.03);
+}
+
+.pill-active-icon {
+  background-color: #4361ee;
+  color: #ffffff;
+  box-shadow: 0 6px 16px -2px rgba(67, 97, 238, 0.35);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+
+/* ==========================================================================
+   GLASSMORPHISM & FROSTED GLASS ENGINE (Matching User Inspiration Inspo)
+   ========================================================================== */
+
+/* 1. Ambient Dynamic Light Canvas for each Glass Theme */
+[data-theme="glass-navy"] .ambient-canvas {
+  background-color: #07152f;
+  background-image: 
+    radial-gradient(circle at 84% 82%, rgba(250, 204, 21, 0.42) 0%, rgba(250, 204, 21, 0.12) 170px, transparent 390px),
+    radial-gradient(circle at 18% 18%, rgba(255, 255, 255, 0.32) 0%, rgba(56, 189, 248, 0.18) 160px, transparent 360px),
+    radial-gradient(circle at 52% 48%, rgba(14, 165, 233, 0.2) 0%, transparent 520px);
+}
+
+[data-theme="glass-obsidian"] .ambient-canvas {
+  background-color: #030712;
+  background-image: 
+    radial-gradient(circle at 84% 82%, rgba(0, 245, 155, 0.35) 0%, rgba(16, 185, 129, 0.12) 180px, transparent 400px),
+    radial-gradient(circle at 18% 18%, rgba(56, 189, 248, 0.28) 0%, transparent 360px),
+    radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.16) 0%, transparent 550px);
+}
+
+[data-theme="glass-twilight"] .ambient-canvas {
+  background-color: #0f0728;
+  background-image: 
+    radial-gradient(circle at 84% 82%, rgba(244, 63, 94, 0.36) 0%, transparent 390px),
+    radial-gradient(circle at 18% 18%, rgba(168, 85, 247, 0.35) 0%, transparent 410px),
+    radial-gradient(circle at 50% 50%, rgba(79, 70, 229, 0.22) 0%, transparent 530px);
+}
+
+[data-theme="glass-emerald"] .ambient-canvas {
+  background-color: #021a14;
+  background-image: 
+    radial-gradient(circle at 84% 82%, rgba(52, 211, 153, 0.35) 0%, transparent 390px),
+    radial-gradient(circle at 18% 18%, rgba(16, 185, 129, 0.3) 0%, transparent 370px),
+    radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.18) 0%, transparent 510px);
+}
+
+[data-theme="glass-ruby"] .ambient-canvas {
+  background-color: #1a050d;
+  background-image: 
+    radial-gradient(circle at 84% 82%, rgba(244, 63, 94, 0.38) 0%, transparent 410px),
+    radial-gradient(circle at 18% 18%, rgba(251, 146, 60, 0.28) 0%, transparent 370px),
+    radial-gradient(circle at 50% 50%, rgba(136, 19, 55, 0.24) 0%, transparent 530px);
+}
+
+[data-theme="glass-amber"] .ambient-canvas {
+  background-color: #160e03;
+  background-image: 
+    radial-gradient(circle at 84% 82%, rgba(245, 158, 11, 0.42) 0%, transparent 390px),
+    radial-gradient(circle at 18% 18%, rgba(253, 230, 138, 0.32) 0%, transparent 370px),
+    radial-gradient(circle at 50% 50%, rgba(180, 83, 9, 0.22) 0%, transparent 530px);
+}
+
+[data-theme="glass-frost"] .ambient-canvas {
+  background-color: #dbeafe;
+  background-image: 
+    radial-gradient(circle at 84% 82%, rgba(67, 97, 238, 0.25) 0%, transparent 410px),
+    radial-gradient(circle at 18% 18%, rgba(56, 189, 248, 0.28) 0%, transparent 390px),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.5) 0%, transparent 510px);
+}
+
+/* 2. Optical Frosted Glass for Main Shell Containers */
+.theme-glass aside.crm-glass-sidebar,
+.theme-glass .crm-glass-sidebar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.03) 100%) !important;
+  backdrop-filter: blur(32px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(200%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.55), inset 0 1px 1px 0 rgba(255, 255, 255, 0.3) !important;
+}
+
+.theme-glass .crm-glass-shell {
+  background: rgba(10, 20, 45, 0.35) !important;
+  backdrop-filter: blur(16px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.45), inset 0 1px 1px 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+/* 3. All Cards across CRM turn Frosted Glass (Direct Match to User Vector Reference) */
+.theme-glass .card:not(.dropdown-menu):not(.floating-dropdown):not([data-floating-menu]):not([role="menu"]),
+.theme-glass .glass-card:not(.dropdown-menu):not(.floating-dropdown):not([data-floating-menu]):not([role="menu"]),
+.theme-glass .glass-panel:not(.dropdown-menu):not(.floating-dropdown):not([data-floating-menu]):not([role="menu"]),
+.theme-glass div.bg-white:not(.dropdown-menu):not(.floating-dropdown):not([data-floating-menu]):not([role="menu"]):not([class*="z-50"]):not([class*="z-40"]):not([class*="z-30"]):not([class*="z-20"]),
+.theme-glass section.bg-white,
+.theme-glass article.bg-white,
+.theme-glass a.bg-white:not(.menu-option):not(.dropdown-menu *) {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 100%) !important;
+  backdrop-filter: blur(28px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(200%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.26) !important;
+  box-shadow: 0 18px 45px -8px rgba(0, 0, 0, 0.55), inset 0 1px 1px 0 rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Glass Card Interactive Hover */
+.theme-glass .card:not(.dropdown-menu):not(.floating-dropdown):not([data-floating-menu]):hover,
+.theme-glass .glass-card:not(.dropdown-menu):not(.floating-dropdown):not([data-floating-menu]):hover,
+.theme-glass div.bg-white:not(.dropdown-menu):not(.floating-dropdown):not([data-floating-menu]):not([class*="z-50"]):not([class*="z-40"]):hover,
+.theme-glass a.bg-white:not(.menu-option):not(.dropdown-menu *):hover {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 100%) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 24px 55px -4px rgba(0, 0, 0, 0.7), inset 0 1px 2px 0 rgba(255, 255, 255, 0.55) !important;
+}
+
+/* Glass Buttons and Interactive Elements */
+.theme-glass button.bg-white,
+.theme-glass a.bg-white {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+.theme-glass button.bg-white:hover,
+.theme-glass a.bg-white:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* 4. Sub-surfaces & inner containers */
+.theme-glass .bg-slate-50,
+.theme-glass .bg-slate-100,
+.theme-glass .bg-slate-100\/80,
+.theme-glass .bg-slate-50\/90,
+.theme-glass .bg-slate-50\/80 {
+  background: var(--color-surface-2) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* 5. Inputs, Selects, and Textareas */
+.theme-glass input:not([type="checkbox"]):not([type="radio"]),
+.theme-glass select,
+.theme-glass textarea {
+  background: rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+
+.theme-glass input::placeholder,
+.theme-glass textarea::placeholder {
+  color: #cbd5e1 !important;
+}
+
+/* 6. Dark Glass Typography & Contrast Protection */
+.theme-glass.dark h1,
+.theme-glass.dark h2,
+.theme-glass.dark h3,
+.theme-glass.dark h4,
+.theme-glass.dark h5,
+.theme-glass.dark .text-slate-900,
+.theme-glass.dark .text-slate-800 {
+  color: #ffffff !important;
+}
+
+.theme-glass.dark .text-slate-700,
+.theme-glass.dark .text-slate-600 {
+  color: #e2e8f0 !important;
+}
+
+.theme-glass.dark .text-slate-500,
+.theme-glass.dark .text-slate-400 {
+  color: #cbd5e1 !important;
+}
+
+.theme-glass.dark .text-emerald-700,
+.theme-glass.dark .text-emerald-600 {
+  color: #34d399 !important;
+}
+
+/* Contrast Protection on Card Hover across Dark & Glass Themes */
+.theme-glass.dark .group:hover .group-hover\:text-ink,
+.dark .group:hover .group-hover\:text-ink {
+  color: var(--color-brand, #ffffff) !important;
+}
+
+.theme-glass.dark .text-ink,
+.dark .text-ink {
+  color: #ffffff !important;
+}
+
+/* Recharts Axis Ticks and Labels */
+.theme-glass text.recharts-cartesian-axis-tick-value,
+.theme-glass .recharts-cartesian-axis-tick text,
+.theme-glass .recharts-polar-angle-axis-tick text,
+.dark text.recharts-cartesian-axis-tick-value,
+.dark .recharts-cartesian-axis-tick text,
+.dark .recharts-polar-angle-axis-tick text {
+  fill: #cbd5e1 !important;
+  font-weight: 600 !important;
+}
+
+.theme-glass .recharts-cartesian-grid line,
+.dark .recharts-cartesian-grid line {
+  stroke: rgba(255, 255, 255, 0.12) !important;
+}
+
+.theme-glass.dark .border-slate-100,
+.theme-glass.dark .border-slate-200,
+.theme-glass.dark .border-slate-200\/90,
+.theme-glass.dark .border-slate-200\/80,
+.theme-glass.dark .border-slate-200\/70,
+.theme-glass.dark .border-slate-300 {
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+/* 7. Universal Solid & Blurred Elevated Menus, Popovers & Dropdowns ("SEE EVERYWHERE") */
+.dropdown-menu,
+.floating-dropdown,
+[data-floating-menu],
+[role="menu"],
+[role="listbox"] {
+  background: var(--color-surface-elevated, #ffffff) !important;
+  background-color: var(--color-surface-elevated, #ffffff) !important;
+  background-image: none !important;
+  backdrop-filter: blur(32px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(200%) !important;
+  border: 1px solid var(--color-border-strong, rgba(255, 255, 255, 0.22)) !important;
+  box-shadow: 0 20px 50px -6px rgba(0, 0, 0, 0.6), 0 8px 20px -4px rgba(0, 0, 0, 0.35) !important;
+  opacity: 1 !important;
+}
+
+/* In Dark Mode & Glass Dark Themes, ensure 100% opaque solid surface so underlying text never bleeds through */
+.dark .dropdown-menu,
+.dark .floating-dropdown,
+.dark [data-floating-menu],
+.dark [role="menu"],
+.dark [role="listbox"],
+.theme-glass.dark .dropdown-menu,
+.theme-glass.dark .floating-dropdown,
+.theme-glass.dark [data-floating-menu] {
+  background: var(--color-surface-elevated, #0f172a) !important;
+  background-color: var(--color-surface-elevated, #0f172a) !important;
+  background-image: none !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: #f8fafc !important;
+}
+
+/* Fallback solid elevated background colors per glass theme */
+[data-theme="glass-ruby"], .theme-glass[data-theme="glass-ruby"] {
+  --color-surface-elevated: #280a15 !important;
+}
+[data-theme="glass-obsidian"], .theme-glass[data-theme="glass-obsidian"] {
+  --color-surface-elevated: #0b0f19 !important;
+}
+[data-theme="glass-twilight"], .theme-glass[data-theme="glass-twilight"] {
+  --color-surface-elevated: #190d36 !important;
+}
+[data-theme="glass-emerald"], .theme-glass[data-theme="glass-emerald"] {
+  --color-surface-elevated: #04241c !important;
+}
+[data-theme="glass-navy"], .theme-glass[data-theme="glass-navy"] {
+  --color-surface-elevated: #0d1b38 !important;
+}
+
+/* In Light Mode, clean crisp white background */
+html:not(.dark) .dropdown-menu,
+html:not(.dark) .floating-dropdown,
+html:not(.dark) [data-floating-menu],
+html:not(.dark) [role="menu"],
+html:not(.dark) [role="listbox"] {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* Universal Option Hover Highlighting ("SO OBVIOUS HIGHLIGHT") */
+.menu-option,
+.dropdown-menu button,
+.dropdown-menu a,
+.floating-dropdown button,
+.floating-dropdown a,
+[data-floating-menu] button,
+[data-floating-menu] a,
+[role="menu"] button,
+[role="menu"] a,
+[role="menuitem"],
+div[class*="z-50"]:not(.fixed) button:not(.btn-no-highlight),
+div[class*="z-50"]:not(.fixed) a:not(.btn-no-highlight) {
+  position: relative;
+  transition: background-color 0.12s ease, color 0.12s ease, transform 0.1s ease !important;
+}
+
+/* Dark Mode Hover Highlighting - clear solid pill highlight */
+.dark .menu-option:hover:not(:disabled):not(.active-selected):not(.danger-option),
+.dark .dropdown-menu button:hover:not(:disabled):not(.active-selected):not(.danger-option),
+.dark .dropdown-menu a:hover:not(.active-selected):not(.danger-option),
+.dark .floating-dropdown button:hover:not(:disabled):not(.active-selected):not(.danger-option),
+.dark .floating-dropdown a:hover:not(.active-selected):not(.danger-option),
+.dark [data-floating-menu] button:hover:not(:disabled):not(.active-selected):not(.danger-option),
+.dark [data-floating-menu] a:hover:not(.active-selected):not(.danger-option),
+.dark div[class*="z-50"]:not(.fixed) button:hover:not(:disabled):not(.active-selected):not(.danger-option) {
+  background-color: rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Light Mode Hover Highlighting - clear crisp pill highlight */
+html:not(.dark) .menu-option:hover:not(:disabled):not(.active-selected):not(.danger-option),
+html:not(.dark) .dropdown-menu button:hover:not(:disabled):not(.active-selected):not(.danger-option),
+html:not(.dark) .dropdown-menu a:hover:not(.active-selected):not(.danger-option),
+html:not(.dark) .floating-dropdown button:hover:not(:disabled):not(.active-selected):not(.danger-option),
+html:not(.dark) .floating-dropdown a:hover:not(.active-selected):not(.danger-option),
+html:not(.dark) [data-floating-menu] button:hover:not(:disabled):not(.active-selected):not(.danger-option),
+html:not(.dark) [data-floating-menu] a:hover:not(.active-selected):not(.danger-option),
+html:not(.dark) div[class*="z-50"]:not(.fixed) button:hover:not(:disabled):not(.active-selected):not(.danger-option) {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  box-shadow: inset 0 0 0 1px #e2e8f0 !important;
+}
+
+/* Danger Option Hover Highlighting */
+.danger-option:hover:not(:disabled) {
+  background-color: rgba(244, 63, 94, 0.18) !important;
+  color: #fb7185 !important;
+  box-shadow: inset 0 0 0 1px rgba(244, 63, 94, 0.35) !important;
+}
+
+/* Modals & Dialogs - Solid surface in all themes */
+.fixed[class*="z-"] > .card,
+.fixed[class*="z-"] > div[class*="rounded-"] {
+  background-color: var(--color-surface-elevated, #ffffff) !important;
+  background-image: none !important;
+}
+.dark .fixed[class*="z-"] > .card,
+.dark .fixed[class*="z-"] > div[class*="rounded-"] {
+  background-color: var(--color-surface-elevated, #0f172a) !important;
+}
+
+/* 8. Universal High-Contrast Inputs, Textareas, and Dropdowns across Dark & Glass Themes */
+.dark input:not(.bg-white input),
+.dark textarea:not(.bg-white textarea),
+.dark select:not(.bg-white select) {
+  color: #ffffff !important;
+  background-color: rgba(0, 0, 0, 0.35) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.dark input:not(.bg-white input)::placeholder,
+.dark textarea:not(.bg-white textarea)::placeholder {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.dark input:not(.bg-white input):focus,
+.dark textarea:not(.bg-white textarea):focus,
+.dark select:not(.bg-white select):focus {
+  border-color: var(--color-brand, #38bdf8) !important;
+  background-color: rgba(0, 0, 0, 0.45) !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.15) !important;
+}
+
+.dark select option {
+  background-color: #0f172a !important;
+  color: #ffffff !important;
+}
+
+/* Light Mode Input & Textarea High-Contrast Standards */
+html:not(.dark) input,
+html:not(.dark) textarea,
+html:not(.dark) select {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder {
+  color: #64748b !important;
+}
+
+html:not(.dark) input:focus,
+html:not(.dark) textarea:focus,
+html:not(.dark) select:focus {
+  border-color: var(--color-brand, #4361ee) !important;
+  box-shadow: 0 0 0 2px rgba(67, 97, 238, 0.15) !important;
+}
+
+/* Ensure buttons with bg-ink adapt to brand and active contrast text */
+.dark .bg-ink {
+  background-color: var(--color-brand) !important;
+  color: var(--color-ink-fg, #ffffff) !important;
+}
+
+.dark .bg-ink:hover {
+  background-color: var(--color-brand-hover) !important;
+}
+
+.dark .bg-ink * {
+  color: var(--color-ink-fg, #ffffff) !important;
+}
+
+/* Ensure secondary surfaces have clear contrast */
+.dark .bg-surface-2 {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* In dark mode, ensure text is bright on dark surfaces while protecting theme preview cards */
+.dark .card [class*="text-slate-500"]:not(.theme-preview-card *),
+.dark .card [class*="text-slate-400"]:not(.theme-preview-card *),
+.dark .ambient-canvas [class*="text-slate-500"]:not(.theme-preview-card *),
+.dark .ambient-canvas [class*="text-slate-400"]:not(.theme-preview-card *) {
+  color: var(--color-text-faint, rgba(255, 255, 255, 0.65));
+}
+
+.dark .card [class*="text-slate-900"]:not(.theme-preview-card *),
+.dark .card [class*="text-slate-800"]:not(.theme-preview-card *),
+.dark .ambient-canvas [class*="text-slate-900"]:not(.theme-preview-card *),
+.dark .ambient-canvas [class*="text-slate-800"]:not(.theme-preview-card *) {
+  color: var(--color-text, #ffffff);
+}
+
+.dark .card [class*="text-slate-700"]:not(.theme-preview-card *),
+.dark .card [class*="text-slate-600"]:not(.theme-preview-card *),
+.dark .ambient-canvas [class*="text-slate-700"]:not(.theme-preview-card *),
+.dark .ambient-canvas [class*="text-slate-600"]:not(.theme-preview-card *) {
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.8));
+}
+
+/* Explicit high-contrast preservation for white/light card elements in all themes */
+.dark .bg-white:not(.theme-preview-card):not(.theme-preview-card *) {
+  background-color: var(--color-surface) !important;
+  color: var(--color-text) !important;
+  border-color: var(--color-border) !important;
+}
+
+.dark .bg-slate-50:not(.theme-preview-card *),
+.dark .bg-slate-100:not(.theme-preview-card *) {
+  background-color: var(--color-surface-2) !important;
+  border-color: var(--color-border) !important;
+}
+
+.dark .border-slate-100:not(.theme-preview-card *),
+.dark .border-slate-200:not(.theme-preview-card *),
+.dark .border-slate-300:not(.theme-preview-card *) {
+  border-color: var(--color-border) !important;
+}
+
+.theme-preview-card {
+  /* Complete isolation for theme cards on /settings/theme */
+  color-scheme: light;
+}
+.dark .bg-white textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+

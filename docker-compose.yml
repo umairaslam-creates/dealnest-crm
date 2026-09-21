@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: localdev
+      POSTGRES_DB: mytm_crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - mytm_crm_pgdata:/var/lib/postgresql/data
+
+volumes:
+  mytm_crm_pgdata:
