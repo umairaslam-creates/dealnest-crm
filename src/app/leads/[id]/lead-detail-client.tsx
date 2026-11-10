@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Mail,
   Phone,
@@ -64,6 +64,7 @@ export function LeadDetailClient({
   currentUser: any;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -82,6 +83,8 @@ export function LeadDetailClient({
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [editLeadOpen, setEditLeadOpen] = useState(false);
   const [convertModalOpen, setConvertModalOpen] = useState(false);
+  const fromSection = searchParams.get("fromSection");
+  const leadsBackHref = fromSection ? `/leads?section=${encodeURIComponent(fromSection)}` : "/leads";
 
   // Current stage tracking
   const stages: Stage[] = lead.pipeline?.stages || [];
@@ -186,7 +189,7 @@ export function LeadDetailClient({
     try {
       await deleteLead(lead.id);
       toast.success("Lead removed.");
-      router.push("/leads");
+      router.replace(leadsBackHref);
     } catch (err) {
       toast.error("Failed to delete lead.");
     }
@@ -196,7 +199,7 @@ export function LeadDetailClient({
     <div className="space-y-6">
       {/* Top Breadcrumb Navigation */}
       <div className="flex items-center gap-2 text-xs font-semibold text-text-muted">
-        <Link href="/leads" className="hover:text-text transition-colors">
+        <Link href={leadsBackHref} className="hover:text-text transition-colors">
           Leads
         </Link>
         <span>/</span>
@@ -392,6 +395,7 @@ export function LeadDetailClient({
 
                 return (
                   <button
+                    data-testid={`stage-selector-${st.id}`}
                     key={st.id}
                     onClick={() => handleStageChange(st.id, st.name)}
                     className={`p-2.5 rounded-xl text-left border transition-all text-[12px] ${
@@ -813,6 +817,7 @@ export function LeadDetailClient({
 
             <div className="flex justify-end">
               <button
+                data-testid="add-note-button"
                 type="submit"
                 disabled={loggingNote}
                 className="px-5 py-2 rounded-xl text-xs font-bold shadow-md transition-all active:scale-[0.98]"
@@ -1059,6 +1064,7 @@ export function LeadDetailClient({
 
           <div className="flex justify-center pt-2">
             <button
+              data-testid="convert-to-deal-button"
               onClick={() => setConvertModalOpen(true)}
               className="px-6 py-2.5 rounded-xl font-bold text-xs shadow-lg transition-all active:scale-[0.98]"
               style={{
@@ -1104,4 +1110,3 @@ export function LeadDetailClient({
     </div>
   );
 }
-

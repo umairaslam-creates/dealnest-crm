@@ -3,7 +3,7 @@
 import React, { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { getProviders, signIn } from "next-auth/react";
 import {
   User,
   Building2,
@@ -98,6 +98,39 @@ const INDUSTRIES = [
   "Other / Independent Venture",
 ];
 
+const COUNTRY_CODES = [
+  { name: "United States", iso: "US", flag: "🇺🇸", code: "+1" },
+  { name: "Canada", iso: "CA", flag: "🇨🇦", code: "+1" },
+  { name: "United Kingdom", iso: "GB", flag: "🇬🇧", code: "+44" },
+  { name: "Pakistan", iso: "PK", flag: "🇵🇰", code: "+92" },
+  { name: "India", iso: "IN", flag: "🇮🇳", code: "+91" },
+  { name: "United Arab Emirates", iso: "AE", flag: "🇦🇪", code: "+971" },
+  { name: "Saudi Arabia", iso: "SA", flag: "🇸🇦", code: "+966" },
+  { name: "Qatar", iso: "QA", flag: "🇶🇦", code: "+974" },
+  { name: "Kuwait", iso: "KW", flag: "🇰🇼", code: "+965" },
+  { name: "Bahrain", iso: "BH", flag: "🇧🇭", code: "+973" },
+  { name: "Oman", iso: "OM", flag: "🇴🇲", code: "+968" },
+  { name: "Turkey", iso: "TR", flag: "🇹🇷", code: "+90" },
+  { name: "Egypt", iso: "EG", flag: "🇪🇬", code: "+20" },
+  { name: "Jordan", iso: "JO", flag: "🇯🇴", code: "+962" },
+  { name: "Lebanon", iso: "LB", flag: "🇱🇧", code: "+961" },
+  { name: "Germany", iso: "DE", flag: "🇩🇪", code: "+49" },
+  { name: "France", iso: "FR", flag: "🇫🇷", code: "+33" },
+  { name: "Italy", iso: "IT", flag: "🇮🇹", code: "+39" },
+  { name: "Spain", iso: "ES", flag: "🇪🇸", code: "+34" },
+  { name: "Netherlands", iso: "NL", flag: "🇳🇱", code: "+31" },
+  { name: "Australia", iso: "AU", flag: "🇦🇺", code: "+61" },
+  { name: "Singapore", iso: "SG", flag: "🇸🇬", code: "+65" },
+  { name: "Malaysia", iso: "MY", flag: "🇲🇾", code: "+60" },
+  { name: "China", iso: "CN", flag: "🇨🇳", code: "+86" },
+  { name: "Japan", iso: "JP", flag: "🇯🇵", code: "+81" },
+  { name: "South Korea", iso: "KR", flag: "🇰🇷", code: "+82" },
+  { name: "South Africa", iso: "ZA", flag: "🇿🇦", code: "+27" },
+  { name: "Nigeria", iso: "NG", flag: "🇳🇬", code: "+234" },
+  { name: "Brazil", iso: "BR", flag: "🇧🇷", code: "+55" },
+  { name: "Mexico", iso: "MX", flag: "🇲🇽", code: "+52" },
+];
+
 export function SignupClient() {
   const router = useRouter();
   const { setTheme, setFontCombo } = useTheme();
@@ -118,7 +151,7 @@ export function SignupClient() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
-  const [countryCode, setCountryCode] = useState("🇺🇸 +1");
+  const [countryCode, setCountryCode] = useState("+1");
   const [showPassword, setShowPassword] = useState(false);
 
   // Individual fields
@@ -237,6 +270,16 @@ export function SignupClient() {
         setErrorMessage("Sign in failed. Please try again.");
       }
     });
+  }
+
+  async function handleGoogleSignIn() {
+    setErrorMessage(null);
+    const providers = await getProviders();
+    if (!providers?.google) {
+      setErrorMessage("Google sign-in is not configured yet. Add Google OAuth credentials in Vercel first.");
+      return;
+    }
+    await signIn("google", { callbackUrl: "/" });
   }
 
   return (
@@ -420,9 +463,27 @@ export function SignupClient() {
 
                     {/* Phone Number Field with Country Flag Dropdown */}
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/[0.06] px-3 py-3 text-[13.5px] text-white shrink-0 cursor-pointer hover:bg-white/10">
-                        <span>{countryCode}</span>
-                        <ChevronDown size={14} className="text-white/40" />
+                      <div className="relative shrink-0">
+                        <select
+                          value={countryCode}
+                          onChange={(e) => setCountryCode(e.target.value)}
+                          aria-label="Country calling code"
+                          className="h-[46px] w-[124px] appearance-none rounded-xl border border-white/10 bg-[#161722] px-3 pr-8 text-[13px] font-semibold text-white outline-none transition-all hover:bg-white/10 focus:border-white/35 focus:bg-[#1b1c28]"
+                        >
+                          {COUNTRY_CODES.map((country) => (
+                            <option
+                              key={`${country.iso}-${country.code}`}
+                              value={country.code}
+                              className="bg-[#12131a] text-white"
+                            >
+                              {country.flag} {country.name} {country.code}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown
+                          size={14}
+                          className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/40"
+                        />
                       </div>
                       <input
                         type="tel"
@@ -759,7 +820,7 @@ export function SignupClient() {
                 <div>
                   <button
                     type="button"
-                    onClick={() => signIn("google", { callbackUrl: "/" })}
+                    onClick={handleGoogleSignIn}
                     className="w-full flex items-center justify-center gap-2.5 rounded-2xl border border-white/10 bg-white/[0.05] hover:bg-white/[0.09] py-3 px-4 text-[13px] font-semibold text-white transition-all cursor-pointer shadow-sm hover:border-white/20"
                   >
                     <svg className="h-4 w-4" viewBox="0 0 24 24">

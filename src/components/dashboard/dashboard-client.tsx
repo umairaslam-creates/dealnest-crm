@@ -21,8 +21,6 @@ import {
   Clock,
   CheckCircle2,
   Handshake,
-  DollarSign,
-  LayoutDashboard,
   ChevronsUpDown,
   Wand2,
   Filter,
@@ -37,12 +35,11 @@ import {
   Users,
   Box,
   Activity,
+  ListChecks,
+  CalendarDays,
+  ArrowRight,
 } from "lucide-react";
 import { StatCard } from "./stat-card";
-import { PipelineChart } from "./pipeline-chart";
-import { GaugeCard } from "./gauge-card";
-import { DonutCard } from "./donut-card";
-import { TopRegionsCard } from "./top-regions-card";
 import { ExportButton } from "@/components/app-shell";
 import { toggleTask } from "@/app/actions";
 import { useToast } from "@/components/toast-context";
@@ -82,11 +79,9 @@ const TIMEFRAME_CONFIG: { id: TimeframeOption; label: string; icon: any }[] = [
 
 export type CardId =
   | "stats"
-  | "pipeline_chart"
-  | "gauge"
-  | "donut"
-  | "geography"
-  | "urgent_tasks"
+  | "daily_brief"
+  | "upcoming_meetings"
+  | "next_actions"
   | "recent_deals";
 
 export type CardConfig = {
@@ -110,48 +105,30 @@ const DEFAULT_CARDS: CardConfig[] = [
     visible: true,
   },
   {
-    id: "pipeline_chart",
-    title: "Pipeline Trajectory & Growth",
-    description: "Cumulative deal values bucketed over rolling 8-week horizon",
+    id: "daily_brief",
+    title: "Daily Meeting Brief",
+    description: "Yesterday's outcomes and today's customer conversations",
     defaultSpan: 2,
     currentSpan: 2,
-    height: 330,
+    height: 360,
     visible: true,
   },
   {
-    id: "gauge",
-    title: "Quota Attainment Gauge",
-    description: "Revenue won versus target sales quota",
+    id: "upcoming_meetings",
+    title: "Upcoming Meetings",
+    description: "Scheduled customer meetings and preparation status",
     defaultSpan: 1,
     currentSpan: 1,
-    height: 330,
+    height: 360,
     visible: true,
   },
   {
-    id: "donut",
-    title: "Lead Sources Breakdown",
-    description: "Proportion of prospects by acquisition channel",
-    defaultSpan: 1,
-    currentSpan: 1,
-    height: 300,
-    visible: true,
-  },
-  {
-    id: "geography",
-    title: "Pipeline by Geography",
-    description: "Regional market distribution with visual share bars",
-    defaultSpan: 2,
-    currentSpan: 2,
-    height: 300,
-    visible: true,
-  },
-  {
-    id: "urgent_tasks",
-    title: "Urgent Action Items",
-    description: "Overdue follow-ups and tasks due today requiring attention",
-    defaultSpan: 2,
-    currentSpan: 2,
-    height: 300,
+    id: "next_actions",
+    title: "Recommended Next Steps",
+    description: "Prioritized actions from meetings, replies and overdue tasks",
+    defaultSpan: 3,
+    currentSpan: 3,
+    height: 320,
     visible: true,
   },
   {
@@ -171,6 +148,7 @@ export function DashboardClient({
   deals = [],
   leads = [],
   tasks = [],
+  meetings = [],
   pipelines = [],
   members = [],
   products = [],
@@ -179,6 +157,7 @@ export function DashboardClient({
   deals: any[];
   leads: any[];
   tasks: any[];
+  meetings: any[];
   pipelines?: any[];
   members?: any[];
   products?: any[];
@@ -385,7 +364,7 @@ export function DashboardClient({
   useEffect(() => {
     setMounted(true);
     try {
-      const saved = localStorage.getItem("mytm_dashboard_customization_v1");
+      const saved = localStorage.getItem("mytm_dashboard_customization_v2");
       if (saved) {
         const parsed: { id: CardId; currentSpan: 1 | 2 | 3; height?: number; visible: boolean }[] = JSON.parse(saved);
         const merged = parsed
@@ -419,7 +398,7 @@ export function DashboardClient({
         height: c.height,
         visible: c.visible,
       }));
-      localStorage.setItem("mytm_dashboard_customization_v1", JSON.stringify(state));
+      localStorage.setItem("mytm_dashboard_customization_v2", JSON.stringify(state));
     } catch (e) {}
   }
 
@@ -480,12 +459,12 @@ export function DashboardClient({
     if (preset === "executive") {
       next = next.map((c) => ({
         ...c,
-        visible: ["stats", "pipeline_chart", "gauge", "geography"].includes(c.id),
+        visible: ["stats", "daily_brief", "upcoming_meetings", "next_actions"].includes(c.id),
       }));
     } else if (preset === "revenue") {
       next = next.map((c) => ({
         ...c,
-        visible: ["stats", "pipeline_chart", "gauge", "recent_deals"].includes(c.id),
+        visible: ["stats", "next_actions", "recent_deals"].includes(c.id),
       }));
     } else {
       next = next.map((c) => ({ ...c, visible: true }));
@@ -629,6 +608,26 @@ export function DashboardClient({
   const wonValue = wonDeals.reduce((sum, d) => sum + (d.value ?? 0), 0);
   const winRate = closedCount > 0 ? Math.round((wonDeals.length / closedCount) * 100) : 0;
 
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfTomorrow = new Date(startOfToday);
+  startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+
+  const yesterdayMeetings = meetings.filter((meeting) => {
+    const start = new Date(meeting.startTime);
+    return start >= startOfYesterday && start < startOfToday && meeting.status !== "CANCELLED";
+  });
+  const todayMeetings = meetings.filter((meeting) => {
+    const start = new Date(meeting.startTime);
+    return start >= startOfToday && start < startOfTomorrow && meeting.status !== "CANCELLED";
+  });
+  const upcomingMeetings = meetings
+    .filter((meeting) => new Date(meeting.startTime) >= startOfTomorrow && meeting.status !== "CANCELLED")
+    .slice(0, 6);
+  const openTasks = filteredTasks.filter((task) => !task.done);
+  const todayStart = startOfToday.getTime();
+
   const stats = [
     {
       label: "Open Pipeline",
@@ -649,8 +648,8 @@ export function DashboardClient({
     {
       label: "Active Deals",
       value: String(openDeals.length),
-      sub: `${filteredDeals.length} total in period`,
-      delta: `${filteredDeals.length}`,
+      sub: `${filteredDeals.length} total opportunities`,
+      delta: `${openDeals.length}`,
       up: true,
       href: "/deals",
     },
@@ -704,12 +703,23 @@ export function DashboardClient({
     };
   });
 
-  // Urgent and today tasks
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const urgentTasks = filteredTasks
-    .filter((t) => !t.done && t.dueDate)
-    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-    .slice(0, 4);
+  const suggestedActions = openTasks
+    .sort((a, b) => {
+      const priorityRank: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+      const priorityDiff = (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3);
+      if (priorityDiff !== 0) return priorityDiff;
+      return new Date(a.dueDate || 8640000000000000).getTime() - new Date(b.dueDate || 8640000000000000).getTime();
+    })
+    .slice(0, 8);
+
+  const meetingAccount = (meeting: any) =>
+    meeting.contact?.account?.name || meeting.contact?.name || meeting.deal?.title || meeting.title;
+
+  const meetingOutcome = (meeting: any) => {
+    const description = String(meeting.description || "");
+    const outcome = description.match(/Outcome:\s*([^\n]+)/i)?.[1];
+    return outcome || (meeting.status === "COMPLETED" ? "Meeting completed; follow-up required." : "Prepare agenda and confirm attendees.");
+  };
 
   // Helper function to map span to Tailwind grid classes
   function getSpanClass(span: 1 | 2 | 3) {
@@ -1429,95 +1439,115 @@ export function DashboardClient({
                   </div>
                 )}
 
-                {cardConfig.id === "pipeline_chart" && (
-                  <div style={{ height: `${effectiveHeight}px` }} className="h-full w-full">
-                    <PipelineChart data={pipelineTrend} />
-                  </div>
-                )}
-
-                {cardConfig.id === "gauge" && (
-                  <div style={{ height: `${effectiveHeight}px` }} className="h-full w-full">
-                    <GaugeCard
-                      title="Quota Attainment"
-                      value={Math.min(100, Math.round((wonValue / activeQuotaTargetVal) * 100))}
-                      max={100}
-                      sub={`${activeQuotaCurrency} ${(wonValue / 1000).toFixed(0)}K of ${activeQuotaCurrency} ${(
-                        activeQuotaTargetVal / 1_000_000
-                      ).toFixed(1)}M target`}
-                      delta={`${wonDeals.length} won`}
-                    />
-                  </div>
-                )}
-
-                {cardConfig.id === "donut" && (
-                  <div style={{ height: `${effectiveHeight}px` }} className="h-full w-full">
-                    <DonutCard sources={sourceEntries} totalLeads={filteredLeads.length} />
-                  </div>
-                )}
-
-                {cardConfig.id === "geography" && (
-                  <div style={{ height: `${effectiveHeight}px` }} className="h-full w-full">
-                    <TopRegionsCard deals={filteredDeals} />
-                  </div>
-                )}
-
-                {cardConfig.id === "urgent_tasks" && (
+                {cardConfig.id === "daily_brief" && (
                   <div
                     style={{ height: `${effectiveHeight}px` }}
                     className="glass-card flex flex-col p-5 h-full w-full border border-border bg-surface"
                   >
-                    <div className="flex items-center justify-between pb-2 border-b border-border shrink-0">
+                    <div className="flex items-center justify-between pb-3 border-b border-border shrink-0">
                       <div className="flex items-center gap-2">
-                        <AlertTriangle size={15} className="text-amber-500" />
-                        <span className="text-[14px] font-bold text-text">
-                          Urgent Follow-ups
-                        </span>
+                        <CalendarDays size={16} className="text-brand" />
+                        <span className="text-[14px] font-bold text-text">Daily Meeting Brief</span>
                       </div>
-                      <Link
-                        href="/tasks"
-                        className="text-[11.5px] font-bold text-brand hover:underline"
-                      >
-                        Open Tasks →
-                      </Link>
+                      <Link href="/meetings" className="text-[11.5px] font-bold text-brand hover:underline">Open calendar →</Link>
                     </div>
+                    <div className={`mt-4 grid gap-5 overflow-y-auto pr-1 ${effectiveSpan === 1 ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2"}`}>
+                      {[
+                        { label: "Yesterday", items: yesterdayMeetings, accent: "bg-slate-400" },
+                        { label: "Today", items: todayMeetings, accent: "bg-brand" },
+                      ].map((group) => (
+                        <section key={group.label}>
+                          <div className="mb-2.5 flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full ${group.accent}`} />
+                            <h3 className="text-[12px] font-bold uppercase text-text-muted">{group.label}</h3>
+                            <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] font-bold text-text-muted">{group.items.length}</span>
+                          </div>
+                          <div className="space-y-2">
+                            {group.items.length === 0 ? (
+                              <p className="rounded-lg border border-dashed border-border p-3 text-[12px] text-text-muted">No meetings recorded.</p>
+                            ) : group.items.map((meeting: any) => (
+                              <div key={meeting.id} className="rounded-lg border border-border bg-surface-2 p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <p className="text-[12.5px] font-bold text-text">{meetingAccount(meeting)}</p>
+                                  <time className="shrink-0 text-[10.5px] font-semibold text-brand">{new Date(meeting.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+                                </div>
+                                <p className="mt-1 text-[11.5px] leading-5 text-text-muted">• {meetingOutcome(meeting)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
+                {cardConfig.id === "upcoming_meetings" && (
+                  <div style={{ height: `${effectiveHeight}px` }} className="glass-card flex h-full w-full flex-col border border-border bg-surface p-5">
+                    <div className="flex items-center justify-between border-b border-border pb-3">
+                      <div className="flex items-center gap-2">
+                        <Calendar size={16} className="text-brand" />
+                        <span className="text-[14px] font-bold text-text">Upcoming Meetings</span>
+                      </div>
+                      <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10.5px] font-bold text-brand">{upcomingMeetings.length}</span>
+                    </div>
                     <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-1">
-                      {urgentTasks.length === 0 ? (
-                        <div className="py-8 text-center text-[12.5px] text-text-muted">
-                          <CheckCircle2 size={24} className="mx-auto mb-1 text-emerald-500 opacity-60" />
-                          All caught up! No urgent follow-ups.
+                      {upcomingMeetings.length === 0 ? (
+                        <div className="py-10 text-center text-[12px] text-text-muted">
+                          <CalendarDays size={24} className="mx-auto mb-2 opacity-50" />
+                          No future meetings recorded.
                         </div>
                       ) : (
-                        urgentTasks.map((t) => {
-                          const isOverdue =
-                            t.dueDate && new Date(t.dueDate).getTime() < todayStart;
-                          return (
-                            <div
-                              key={t.id}
-                              className="p-2.5 rounded-xl border border-border bg-surface-2 flex items-center justify-between gap-2 text-[12.5px] hover:bg-surface-2/80 transition-colors"
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <span
-                                  className={`h-2 w-2 rounded-full shrink-0 ${
-                                    isOverdue ? "bg-rose-500" : "bg-amber-500"
-                                  }`}
-                                />
-                                <span className="font-semibold text-text truncate">
-                                  {t.title}
-                                </span>
-                              </div>
-                              <span
-                                suppressHydrationWarning
-                                className={`text-[11px] font-semibold shrink-0 ${
-                                  isOverdue ? "text-rose-500 font-bold" : "text-amber-600 dark:text-amber-400"
-                                }`}
-                              >
-                                {new Date(t.dueDate).toLocaleDateString()}
-                              </span>
+                        upcomingMeetings.map((meeting: any) => (
+                          <div key={meeting.id} className="rounded-lg border border-border bg-surface-2 p-3">
+                            <p className="text-[12.5px] font-bold text-text">{meetingAccount(meeting)}</p>
+                            <div className="mt-1.5 flex items-center gap-2 text-[11px] text-text-muted">
+                              <Clock size={11} className="text-brand" />
+                              <span>{new Date(meeting.startTime).toLocaleDateString([], { month: "short", day: "numeric" })}</span>
+                              <span>•</span>
+                              <span>{new Date(meeting.startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                             </div>
-                          );
-                        })
+                            <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-text-muted">{meetingOutcome(meeting)}</p>
+                          </div>
+                        ))
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {cardConfig.id === "next_actions" && (
+                  <div style={{ height: `${effectiveHeight}px` }} className="glass-card flex h-full w-full flex-col border border-border bg-surface p-5">
+                    <div className="flex items-center justify-between border-b border-border pb-3">
+                      <div className="flex items-center gap-2">
+                        <ListChecks size={16} className="text-brand" />
+                        <div>
+                          <h3 className="text-[14px] font-bold text-text">Recommended Next Steps</h3>
+                          <p className="text-[10.5px] text-text-muted">Priority order for the sales team</p>
+                        </div>
+                      </div>
+                      <Link href="/tasks" className="flex items-center gap-1 text-[11.5px] font-bold text-brand hover:underline">All tasks <ArrowRight size={12} /></Link>
+                    </div>
+                    <div className={`mt-3 grid flex-1 gap-2 overflow-y-auto pr-1 ${effectiveSpan === 1 ? "grid-cols-1" : effectiveSpan === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 md:grid-cols-2"}`}>
+                      {suggestedActions.length === 0 ? (
+                        <div className="col-span-full py-8 text-center text-[12.5px] text-text-muted">
+                          <CheckCircle2 size={24} className="mx-auto mb-2 text-emerald-500 opacity-60" />
+                          No open actions. Add the next commitment from each customer conversation.
+                        </div>
+                      ) : suggestedActions.map((task, taskIndex) => {
+                        const overdue = task.dueDate && new Date(task.dueDate).getTime() < todayStart;
+                        return (
+                          <div key={task.id} className="flex items-start gap-3 rounded-lg border border-border bg-surface-2 p-3">
+                            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${overdue ? "bg-rose-500/15 text-rose-500" : "bg-brand/10 text-brand"}`}>{taskIndex + 1}</span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[12.5px] font-bold text-text">{task.title}</p>
+                              {task.description && <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-muted">{task.description}</p>}
+                              <div className="mt-2 flex items-center gap-2 text-[10.5px] font-semibold">
+                                <span className={task.priority === "HIGH" ? "text-rose-500" : "text-amber-500"}>{task.priority}</span>
+                                {task.dueDate && <span className={overdue ? "text-rose-500" : "text-text-muted"}>{overdue ? "Overdue" : "Due"} {new Date(task.dueDate).toLocaleDateString([], { month: "short", day: "numeric" })}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

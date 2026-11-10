@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -12,12 +11,19 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  arrayMove,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   MoreHorizontal,
   Plus,
   GripVertical,
   Pencil,
   Check,
-  ExternalLink,
+  Eye,
   ArrowRightCircle,
   User,
   Package,
@@ -64,7 +70,18 @@ export type BoardCard = {
     id?: string;
     name: string | null;
   } | null;
+  companyName?: string | null;
+  roleTitle?: string | null;
   productName?: string | null;
+  lastInteraction?: {
+    type: string;
+    date: string;
+    summary?: string | null;
+  } | null;
+  nextStep?: {
+    title: string;
+    dueDate?: string | null;
+  } | null;
   dateHistory?: Array<{
     stageName: string;
     date: string;
@@ -156,6 +173,7 @@ function Card({
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: card.id,
+    data: { type: "card" },
   });
 
   useEffect(() => {
@@ -174,18 +192,20 @@ function Card({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showOwnerMenu, showActionsMenu]);
 
+  function openCardPage() {
+    if (onClick) {
+      onClick(card.id);
+    } else if (card.href) {
+      router.push(card.href);
+    }
+  }
+
   return (
     <div
+      data-testid={`lead-card-${card.id}`}
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      onClick={() => {
-        if (onClick) {
-          onClick(card.id);
-        } else if (card.href) {
-          router.push(card.href);
-        }
-      }}
       style={
         transform
           ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
@@ -196,7 +216,7 @@ function Card({
           ? "ring-2 ring-brand border-brand bg-brand/5 shadow-md"
           : "border-border bg-surface"
       } ${isDragging ? "opacity-40" : ""} ${
-        showActionsMenu || showOwnerMenu ? "relative z-30" : "relative"
+        showActionsMenu || showOwnerMenu ? "relative z-50 overflow-visible" : "relative overflow-hidden"
       }`}
     >
       {/* Top row: Checkbox, Title & Action buttons */}
@@ -215,33 +235,26 @@ function Card({
               className="h-4 w-4 rounded border-border-strong text-brand focus:ring-brand/40 cursor-pointer shrink-0 mt-0.5 accent-brand"
             />
           )}
-          {card.contact ? (
-            <Link
-              href={`/contacts/${card.contact.id}`}
-              onClick={(e) => e.stopPropagation()}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="text-[13px] font-bold leading-snug text-text hover:text-brand hover:underline transition-colors truncate"
-              title={`View contact profile for ${card.title}`}
-            >
-              {card.title}
-            </Link>
-          ) : (
-            <p className="text-[13px] font-bold leading-snug text-text group-hover:text-brand transition-colors truncate">
-              {card.title}
-            </p>
-          )}
+          <p className="text-[13px] font-bold leading-snug text-text group-hover:text-brand transition-colors truncate">
+            {card.title}
+          </p>
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
           {card.href && (
-            <Link
-              href={card.href}
+            <button
+              data-testid={`open-lead-page-${card.id}`}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openCardPage();
+              }}
               onPointerDown={(e) => e.stopPropagation()}
-              className="rounded p-1 text-text-muted hover:text-brand hover:bg-surface-2 transition-colors"
-              title="Open full page"
+              className="rounded p-1 text-text-muted transition-colors hover:bg-surface-2 hover:text-brand"
+              title="View lead details"
             >
-              <ExternalLink size={12} />
-            </Link>
+              <Eye size={13} />
+            </button>
           )}
 
           {/* 3 Dots Actions Menu Button */}
@@ -268,7 +281,7 @@ function Card({
               <div
                 data-floating-menu="true"
                 style={{ backgroundColor: "var(--color-surface-elevated, #0f172a)" }}
-                className="dropdown-menu floating-dropdown absolute right-0 top-full mt-1.5 z-[100] w-52 rounded-2xl border border-border-strong bg-[var(--color-surface-elevated,#0f172a)] p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-100"
+                className="dropdown-menu floating-dropdown absolute right-0 top-full mt-1.5 z-[1000] w-52 rounded-2xl border border-border-strong bg-[var(--color-surface-elevated,#0f172a)] p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-100"
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
               >
@@ -483,11 +496,18 @@ function Card({
         </div>
       </div>
 
-      {/* Subtitle: Company or Account + Section Pill */}
+      {/* Company / role snapshot + Section Pill */}
       <div className="mt-1 flex items-center justify-between gap-1">
-        <p className="text-[12px] font-medium text-text-muted truncate">
-          {card.subtitle}
-        </p>
+        <div className="min-w-0">
+          <p className="text-[12px] font-bold text-text truncate">
+            {card.companyName || card.subtitle}
+          </p>
+          {card.roleTitle && (
+            <p className="mt-0.5 text-[11px] font-medium text-text-muted truncate">
+              {card.roleTitle}
+            </p>
+          )}
+        </div>
         {card.sectionName && (
           <span
             className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold bg-brand/10 text-brand border border-brand/20 shrink-0"
@@ -501,27 +521,60 @@ function Card({
 
       {/* Product Tag (if applicable) */}
       {card.productName && (
-        <div className="mt-1.5 flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-surface-2 border border-border/50 text-[11px] font-medium text-text max-w-fit">
+        <div className="mt-2 flex max-w-full items-center gap-1.5 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2 py-1 text-[11px] font-semibold text-text">
           <Package size={11} className="text-brand shrink-0" />
-          <span className="truncate max-w-[190px]">{card.productName}</span>
+          <span className="min-w-0 truncate">{card.productName}</span>
         </div>
       )}
+
+      <div className="mt-2 space-y-1.5">
+        {card.lastInteraction ? (
+          <div
+            className="rounded-lg border border-border/50 bg-surface-2/70 px-2 py-1.5"
+            title={card.lastInteraction.summary || undefined}
+          >
+            <div className="flex items-center justify-between gap-2 text-[10.5px] font-bold uppercase tracking-wide text-text-faint">
+              <span className="inline-flex items-center gap-1">
+                <Clock size={10} className="text-brand" />
+                Last {card.lastInteraction.type}
+              </span>
+              <span className="font-numeric normal-case tracking-normal">{card.lastInteraction.date}</span>
+            </div>
+            <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-snug text-text">
+              {card.lastInteraction.summary || "Interaction logged, no summary captured."}
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border/60 bg-surface-2/40 px-2 py-1.5 text-[11px] font-medium text-text-muted">
+            No interaction logged yet
+          </div>
+        )}
+
+        {card.nextStep && (
+          <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-300">
+            <Calendar size={11} className="shrink-0" />
+            <span className="min-w-0 truncate">Next: {card.nextStep.title}</span>
+            {card.nextStep.dueDate && (
+              <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 font-numeric text-[10px]">
+                {card.nextStep.dueDate}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Contact badge on Deal Card (if title is different) */}
       {card.contact && card.contact.name !== card.title && (
         <div className="mt-1.5">
-          <Link
-            href={`/contacts/${card.contact.id}`}
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-surface-2/80 hover:bg-brand/15 hover:border-brand/40 border border-border/60 text-[11px] font-semibold text-text group/person transition-colors"
-            title={`View person profile for ${card.contact.name}`}
+          <span
+            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-surface-2/80 border border-border/60 text-[11px] font-semibold text-text"
+            title={card.contact.name}
           >
             <User size={11} className="text-brand shrink-0" />
-            <span className="group-hover/person:text-brand transition-colors truncate max-w-[150px]">
+            <span className="truncate max-w-[150px]">
               {card.contact.name}
             </span>
-          </Link>
+          </span>
         </div>
       )}
 
@@ -553,7 +606,7 @@ function Card({
               <div
                 data-floating-menu="true"
                 style={{ backgroundColor: "var(--color-surface-elevated, #0f172a)" }}
-                className="dropdown-menu floating-dropdown absolute right-0 top-6 z-[100] w-52 rounded-2xl border border-border-strong bg-[var(--color-surface-elevated,#0f172a)] p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-100"
+                className="dropdown-menu floating-dropdown absolute right-0 top-6 z-[1000] w-52 rounded-2xl border border-border-strong bg-[var(--color-surface-elevated,#0f172a)] p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-100"
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
               >
@@ -614,13 +667,13 @@ function Card({
 
       {/* Customizable Badges / Labels */}
       {card.tags && card.tags.length > 0 && (
-        <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+        <div className="mt-2.5 flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
           {card.tags.map((t, idx) => {
             const color = t.color || "#6366f1";
             return (
               <span
                 key={idx}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10.5px] font-bold tracking-wide border shadow-xs"
+                className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[10.5px] font-bold tracking-wide shadow-xs"
                 style={{
                   backgroundColor: `${color}18`,
                   borderColor: `${color}45`,
@@ -631,15 +684,31 @@ function Card({
                   className="h-1.5 w-1.5 rounded-full shrink-0"
                   style={{ backgroundColor: color }}
                 />
-                <span className="truncate max-w-[130px]">{t.label}</span>
+                <span className="min-w-0 max-w-[130px] truncate">{t.label}</span>
               </span>
             );
           })}
         </div>
       )}
 
+      {card.actionLabel && onAction && (
+        <button
+          data-testid={`move-lead-to-pipeline-${card.id}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onAction(card.id);
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-brand/30 bg-brand/10 px-3 py-1.5 text-[11.5px] font-bold text-brand transition-colors hover:bg-brand hover:text-white"
+          title="Move this lead into the deals pipeline"
+        >
+          <ArrowRightCircle size={13} />
+          <span>{card.actionLabel}</span>
+        </button>
+      )}
+
       {/* Meta (Value / Phone) & Badges (Temperature, Source) */}
-      <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
+      <div className="mt-3 flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2">
         {card.meta ? (
           <span className="font-numeric text-[12px] font-bold text-text truncate max-w-[140px]" title={card.meta}>
             {card.meta}
@@ -648,14 +717,17 @@ function Card({
           <span />
         )}
 
-        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+        <div className="flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end gap-1.5">
           {/* Temperature Badge with proper icon! */}
           <LeadScoreBadge score={card.score} />
 
           {/* Source pill (e.g. LinkedIn, Inbound Web) */}
           {card.source && (
-            <span className="text-[10.5px] font-medium text-text-muted bg-surface-2 px-2 py-0.5 rounded-full border border-border/50">
-              {card.source}
+            <span
+              className="min-w-0 max-w-full rounded-full border border-border/50 bg-surface-2 px-2 py-0.5 text-[10.5px] font-medium text-text-muted"
+              title={card.source}
+            >
+              <span className="block max-w-[150px] truncate">{card.source}</span>
             </span>
           )}
 
@@ -689,6 +761,7 @@ function Column({
   onToggleTag,
   sections,
   availableLabels,
+  sortableEnabled,
 }: {
   stage: BoardStage;
   cards: BoardCard[];
@@ -706,20 +779,49 @@ function Column({
   onToggleTag?: (cardId: string, tag: string) => void;
   sections?: Array<{ id: string; name: string; isDefault?: boolean }>;
   availableLabels?: Array<{ id: string; name: string; color: string }>;
+  sortableEnabled?: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: stage.id });
+  const {
+    attributes: stageDragAttributes,
+    listeners: stageDragListeners,
+    setNodeRef: setSortableNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: `stage:${stage.id}`,
+    data: { type: "stage", stageId: stage.id },
+    disabled: !sortableEnabled,
+  });
+  const { setNodeRef: setDroppableNodeRef, isOver } = useDroppable({ id: stage.id });
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(stage.name);
 
   return (
     <div
-      ref={setNodeRef}
+      data-testid={`stage-column-${stage.id}`}
+      ref={setSortableNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
       className={`flex h-full w-[280px] shrink-0 flex-col rounded-xl border transition-colors ${
         isOver ? "border-accent bg-accent-soft/40" : "border-transparent"
-      }`}
+      } ${isDragging ? "z-40 opacity-70" : ""}`}
     >
       <div className="flex items-center justify-between px-2 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
+          {sortableEnabled && (
+            <button
+              type="button"
+              {...stageDragAttributes}
+              {...stageDragListeners}
+              className="shrink-0 cursor-grab rounded p-1 text-text-faint hover:bg-surface-2 hover:text-brand active:cursor-grabbing"
+              title="Drag to reorder this stage"
+            >
+              <GripVertical size={13} />
+            </button>
+          )}
           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: stage.color }} />
           {editing ? (
             <input
@@ -753,7 +855,7 @@ function Column({
         </button>
       </div>
 
-      <div className="flex-1 space-y-2.5 overflow-y-auto rounded-xl bg-surface-2/70 p-2.5">
+      <div ref={setDroppableNodeRef} className="flex-1 space-y-2.5 overflow-y-auto rounded-xl bg-surface-2/70 p-2.5">
         {cards.map((c) => (
           <Card
             key={c.id}
@@ -802,6 +904,7 @@ export function KanbanBoard({
   onToggleCardTag,
   sections,
   availableLabels,
+  onReorderStages,
 }: {
   initialStages: BoardStage[];
   initialCards: BoardCard[];
@@ -821,6 +924,7 @@ export function KanbanBoard({
   onToggleCardTag?: (cardId: string, tag: string) => void;
   sections?: Array<{ id: string; name: string; isDefault?: boolean }>;
   availableLabels?: Array<{ id: string; name: string; color: string }>;
+  onReorderStages?: (stageIds: string[]) => void;
 }) {
   const [stages, setStages] = useState(initialStages);
   const [cards, setCards] = useState(initialCards);
@@ -837,6 +941,10 @@ export function KanbanBoard({
   }, [initialStages]);
 
   function handleDragStart(e: DragStartEvent) {
+    if (e.active.data.current?.type === "stage") {
+      setActiveCard(null);
+      return;
+    }
     setActiveCard(cards.find((c) => c.id === e.active.id) ?? null);
   }
 
@@ -844,7 +952,24 @@ export function KanbanBoard({
     setActiveCard(null);
     const { active, over } = e;
     if (!over) return;
-    const stageId = String(over.id);
+
+    if (active.data.current?.type === "stage") {
+      const activeStageId = String(active.id).replace(/^stage:/, "");
+      const overStageId = String(over.id).replace(/^stage:/, "");
+      if (!activeStageId || !overStageId || activeStageId === overStageId) return;
+
+      setStages((prev) => {
+        const oldIndex = prev.findIndex((stage) => stage.id === activeStageId);
+        const newIndex = prev.findIndex((stage) => stage.id === overStageId);
+        if (oldIndex < 0 || newIndex < 0) return prev;
+        const next = arrayMove(prev, oldIndex, newIndex);
+        onReorderStages?.(next.map((stage) => stage.id));
+        return next;
+      });
+      return;
+    }
+
+    const stageId = String(over.id).replace(/^stage:/, "");
     setCards((prev) => prev.map((c) => (c.id === active.id ? { ...c, stageId } : c)));
     onMoveCard?.(String(active.id), stageId);
   }
@@ -869,29 +994,35 @@ export function KanbanBoard({
   return (
     <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex h-full gap-4 overflow-x-auto p-6">
-        {stages.map((stage) => (
-          <Column
-            key={stage.id}
-            stage={stage}
-            cards={cards.filter((c) => c.stageId === stage.id)}
-            onRename={renameStage}
-            onCardAction={onCardAction}
-            onCardClick={onCardClick}
-            selectable={selectable}
-            selectedCardIds={selectedCardIds}
-            onToggleSelectCard={onToggleSelectCard}
-            members={members}
-            onChangeOwner={onChangeOwner}
-            onEdit={onEditCard}
-            onMoveToSection={onMoveCardToSection}
-            onDelete={onDeleteCard}
-            onToggleTag={onToggleCardTag}
-            sections={sections}
-            availableLabels={availableLabels}
-          />
-        ))}
+        <SortableContext
+          items={stages.map((stage) => `stage:${stage.id}`)}
+          strategy={horizontalListSortingStrategy}
+        >
+          {stages.map((stage) => (
+            <Column
+              key={stage.id}
+              stage={stage}
+              cards={cards.filter((c) => c.stageId === stage.id)}
+              onRename={renameStage}
+              onCardAction={onCardAction}
+              onCardClick={onCardClick}
+              selectable={selectable}
+              selectedCardIds={selectedCardIds}
+              onToggleSelectCard={onToggleSelectCard}
+              members={members}
+              onChangeOwner={onChangeOwner}
+              onEdit={onEditCard}
+              onMoveToSection={onMoveCardToSection}
+              onDelete={onDeleteCard}
+              onToggleTag={onToggleCardTag}
+              sections={sections}
+              availableLabels={availableLabels}
+              sortableEnabled={Boolean(onReorderStages)}
+            />
+          ))}
+        </SortableContext>
 
-        <div className="w-[220px] shrink-0 pt-2">
+        {onAddStage && <div className="w-[220px] shrink-0 pt-2">
           {addingStage ? (
             <div className="rounded-lg border border-border bg-surface p-2 shadow-card">
               <input
@@ -926,7 +1057,7 @@ export function KanbanBoard({
               Add stage
             </button>
           )}
-        </div>
+        </div>}
       </div>
 
       <DragOverlay>

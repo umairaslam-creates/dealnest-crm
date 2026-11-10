@@ -68,6 +68,7 @@ export function ConvertLeadModal({
           </select>
 
           <select
+            data-testid="stage-selector"
             value={stageId}
             onChange={(e) => setStageId(e.target.value)}
             className="w-full rounded-md border border-border-strong px-2.5 py-1.5 text-[13px] outline-none"
@@ -101,6 +102,7 @@ export function ConvertLeadModal({
           </div>
 
           <button
+            data-testid="convert-to-deal-button"
             onClick={handleConvert}
             disabled={pending || !pipelineId || !stageId}
             className="w-full rounded-md bg-accent px-3 py-2 text-[13px] font-medium text-accent-fg disabled:opacity-60"

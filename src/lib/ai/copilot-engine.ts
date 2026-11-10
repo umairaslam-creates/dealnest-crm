@@ -50,15 +50,15 @@ export async function createLeadTool(input: {
   email?: string;
   phone?: string;
   title?: string;
+  website?: string;
+  productInterest?: string;
   value?: number;
   score?: "hot" | "warm" | "cold";
   notes?: string;
   ownerId?: string;
+  sectionName?: string;
 }): Promise<CopilotResponse> {
-  const leadPipeline = await db.query.pipelines.findFirst({
-    where: eq(pipelines.type, "LEAD"),
-    with: { stages: { orderBy: [stages.order] } },
-  });
+  const leadPipeline = await getLeadPipelineForCopilot(input.sectionName);
 
   const firstStage = leadPipeline?.stages?.[0];
 
@@ -70,6 +70,8 @@ export async function createLeadTool(input: {
       email: input.email,
       phone: input.phone,
       title: input.title,
+      website: input.website,
+      productInterest: input.productInterest,
       value: input.value || 0,
       score: input.score || "warm",
       pipelineId: leadPipeline?.id,
@@ -95,15 +97,127 @@ export async function createLeadTool(input: {
       newLead.company ? ` at **${newLead.company}**` : ""
     }${
       newLead.value ? ` with estimated value **$${newLead.value.toLocaleString()}**` : ""
-    }. Score set to **${newLead.score?.toUpperCase()}**.`,
+    }. Score set to **${newLead.score?.toUpperCase()}** in **${leadPipeline?.name || "Leads"}**.`,
     actionExecuted: "create_lead",
     data: newLead,
-    navigationPath: `/leads`,
+    navigationPath: leadPipeline?.id ? `/leads?section=${leadPipeline.id}` : `/leads`,
     badges: [
       { label: `Lead: ${newLead.contactName}`, type: "success" },
       { label: `Score: ${newLead.score?.toUpperCase()}`, type: "info" },
       ...(newLead.value ? [{ label: `$${newLead.value.toLocaleString()}`, type: "metric" as const }] : []),
     ],
+  };
+}
+
+async function getLeadPipelineForCopilot(sectionName?: string) {
+  if (sectionName) {
+    const allLeadPipelines = await db.query.pipelines.findMany({
+      where: eq(pipelines.type, "LEAD"),
+      with: { stages: { orderBy: [stages.order] } },
+      orderBy: [pipelines.createdAt],
+    });
+    const normalized = sectionName.trim().toLowerCase();
+    const existing = allLeadPipelines.find(
+      (pipeline) =>
+        pipeline.name.toLowerCase() === normalized ||
+        pipeline.name.toLowerCase().includes(normalized) ||
+        normalized.includes(pipeline.name.toLowerCase())
+    );
+    if (existing) return existing;
+
+    const [created] = await db.insert(pipelines).values({ name: sectionName.trim(), type: "LEAD" }).returning();
+    await db.insert(stages).values([
+      { pipelineId: created.id, name: "New Contact", order: 0, color: "#3b82f6" },
+      { pipelineId: created.id, name: "Contacted", order: 1, color: "#f59e0b" },
+      { pipelineId: created.id, name: "Meeting Scheduled", order: 2, color: "#8b5cf6" },
+      { pipelineId: created.id, name: "Qualified", order: 3, color: "#10b981" },
+    ]);
+    const createdStages = await db.query.stages.findMany({
+      where: eq(stages.pipelineId, created.id),
+      orderBy: [stages.order],
+    });
+    return { ...created, stages: createdStages };
+  }
+
+  return db.query.pipelines.findFirst({
+    where: eq(pipelines.type, "LEAD"),
+    with: { stages: { orderBy: [stages.order] } },
+  });
+}
+
+function requestedLeadSection(prompt: string) {
+  const match =
+    prompt.match(/(?:move|put|add|import|save|send)?\s*(?:it|this|them|lead|leads|contact|data)?\s*(?:to|into|in|under)\s+["']?([a-z0-9 &/.-]{2,60})["']?\s+section/i) ||
+    prompt.match(/section\s+["']?([a-z0-9 &/.-]{2,60})["']?/i);
+  return match?.[1]?.replace(/\s+/g, " ").trim();
+}
+
+function labeledValue(prompt: string, labels: string[]) {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = prompt.match(new RegExp(`(?:^|\\n|\\r)\\s*${escaped}\\s*[:\\-]\\s*([^\\n\\r]+)`, "i"));
+    const value = match?.[1]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function parseRawLeadPrompt(prompt: string) {
+  const email = prompt.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0];
+  const phone = prompt.match(/(\+?[0-9][0-9\s().-]{7,20}[0-9])/)
+    ?.[0]
+    ?.replace(/\s+/g, " ")
+    .trim();
+  const website = prompt.match(/https?:\/\/[^\s]+|(?:www\.)[^\s]+/i)?.[0];
+  const sectionName = requestedLeadSection(prompt);
+  const score = prompt.toLowerCase().includes("hot")
+    ? "hot"
+    : prompt.toLowerCase().includes("cold")
+      ? "cold"
+      : "warm";
+
+  let contactName =
+    labeledValue(prompt, ["contact name", "lead name", "full name", "name", "person", "contact"]) ||
+    undefined;
+  const title = labeledValue(prompt, ["title", "designation", "job title", "position", "role"]);
+  const company = labeledValue(prompt, ["company", "company name", "account", "organization", "business"]);
+  const productInterest = labeledValue(prompt, ["product", "product interest", "solution", "interest", "service"]);
+  const notes = labeledValue(prompt, ["notes", "note", "details", "comment", "summary"]);
+
+  if (!contactName) {
+    const candidate = prompt
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => {
+        const lowerLine = line.toLowerCase();
+        return (
+          /^[a-z][a-z .'-]{2,60}$/i.test(line) &&
+          !lowerLine.includes("lead") &&
+          !lowerLine.includes("section") &&
+          !lowerLine.includes("add ") &&
+          !lowerLine.includes("move ") &&
+          !lowerLine.includes("email") &&
+          !lowerLine.includes("phone") &&
+          !lowerLine.includes("company")
+        );
+      });
+    contactName = candidate;
+  }
+
+  if (!contactName && email) contactName = email.split("@")[0];
+  if (!contactName && company) contactName = `${company} Contact`;
+
+  return {
+    contactName,
+    company,
+    email,
+    phone,
+    title,
+    website,
+    productInterest,
+    score: score as "hot" | "warm" | "cold",
+    notes,
+    sectionName,
   };
 }
 
@@ -624,6 +738,28 @@ export async function processCopilotCommand(
     (lower.startsWith("create ") || lower.startsWith("add ") || lower.startsWith("new ")) &&
     lower.includes("lead")
   ) {
+    const rawLead = parseRawLeadPrompt(cleanPrompt);
+    if (
+      rawLead.contactName &&
+      (cleanPrompt.includes("\n") ||
+        rawLead.sectionName ||
+        /(?:name|phone|company|email|title|designation)\s*[:\-]/i.test(cleanPrompt))
+    ) {
+      return await createLeadTool({
+        contactName: rawLead.contactName,
+        company: rawLead.company,
+        email: rawLead.email,
+        phone: rawLead.phone,
+        title: rawLead.title,
+        website: rawLead.website,
+        productInterest: rawLead.productInterest,
+        score: rawLead.score,
+        notes: rawLead.notes || `Imported by AI Copilot from raw text.\n\n${cleanPrompt}`,
+        ownerId: userId,
+        sectionName: rawLead.sectionName,
+      });
+    }
+
     // Extract email
     const emailMatch = cleanPrompt.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
     const email = emailMatch ? emailMatch[0] : undefined;
@@ -652,6 +788,7 @@ export async function processCopilotCommand(
       .replace(email || "", "")
       .replace(phone || "", "")
       .replace(/(?:value|worth|\$)\s*([0-9,]+(?:\.[0-9]+)?\s*(k|m)?)/i, "")
+      .replace(/(?:move|put|add|save|send)?\s*(?:it|this|lead)?\s*(?:to|into|in|under)\s+["']?[a-z0-9 &/.-]{2,60}["']?\s+section/gi, "")
       .replace(/\s+(email|phone|value|score)\s*/gi, " ")
       .trim();
 
@@ -674,6 +811,7 @@ export async function processCopilotCommand(
       value,
       score,
       ownerId: userId,
+      sectionName: requestedLeadSection(cleanPrompt),
     });
   }
 

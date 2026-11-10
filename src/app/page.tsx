@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const user = await getSessionUser();
-  const [deals, leads, tasks, pipelines, members, products, targetsRes] = await Promise.all([
+  const [deals, leads, tasks, meetings, pipelines, members, products, targetsRes] = await Promise.all([
     db.query.deals.findMany({
       with: { account: true, stage: true, owner: true, pipeline: true, product: true },
       orderBy: (d, { desc }) => desc(d.createdAt),
@@ -20,6 +20,14 @@ export default async function DashboardPage() {
     db.query.tasks.findMany({
       with: { deal: true, owner: true },
       orderBy: (t, { asc }) => asc(t.dueDate),
+    }),
+    db.query.meetings.findMany({
+      with: {
+        contact: { with: { account: true } },
+        deal: true,
+        user: true,
+      },
+      orderBy: (m, { asc }) => asc(m.startTime),
     }),
     db.query.pipelines.findMany({
       with: { stages: { orderBy: (s, { asc }) => asc(s.order) } },
@@ -42,6 +50,7 @@ export default async function DashboardPage() {
         deals={deals}
         leads={leads}
         tasks={tasks}
+        meetings={meetings}
         pipelines={pipelines}
         members={members}
         products={products}

@@ -402,6 +402,10 @@ export function InboxClient({
   async function handleConnectGoogle() {
     startTransition(async () => {
       const res = await toggleGoogleConnectionAction(true, googleEmail);
+      if ((res as any).redirectUrl) {
+        window.location.href = (res as any).redirectUrl;
+        return;
+      }
       if (res.success) {
         setIsGoogleActive(true);
         toast.success("Google Workspace Gmail connected.");
@@ -975,4 +979,3 @@ export function InboxClient({
     </div>
   );
 }
-

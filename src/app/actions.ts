@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { db } from "@/db/client";
 import { auth } from "@/auth";
 import { sendGmail, createCalendarEvent, disconnectGoogle } from "@/lib/google";
+import { getOpenAiIntegration } from "@/lib/user-integrations";
 import {
   deals,
   leads,
@@ -18,6 +19,7 @@ import {
   contacts,
   accounts,
   stageHistory,
+  agentAuditLogs,
   feedback,
 } from "@/db/schema";
 
@@ -78,6 +80,46 @@ export async function addStage(pipelineId: string, name: string) {
   revalidatePath("/settings/pipelines");
 }
 
+export async function reorderStages(stageIds: string[]) {
+  const orderedIds = Array.from(new Set(stageIds.filter(Boolean)));
+  if (orderedIds.length < 2) return [];
+
+  const currentStages = await db.query.stages.findMany({
+    where: inArray(stages.id, orderedIds),
+  });
+
+  if (currentStages.length !== orderedIds.length) {
+    throw new Error("One or more stages could not be found.");
+  }
+
+  const pipelineId = currentStages[0]?.pipelineId;
+  if (!pipelineId || currentStages.some((stage) => stage.pipelineId !== pipelineId)) {
+    throw new Error("Stages can only be reordered within the same section or pipeline.");
+  }
+
+  for (let index = 0; index < orderedIds.length; index++) {
+    await db
+      .update(stages)
+      .set({ order: -(index + 1) })
+      .where(eq(stages.id, orderedIds[index]));
+  }
+
+  const updates = [];
+  for (let index = 0; index < orderedIds.length; index++) {
+    const [updated] = await db
+      .update(stages)
+      .set({ order: index })
+      .where(eq(stages.id, orderedIds[index]))
+      .returning();
+    updates.push(updated);
+  }
+
+  revalidatePath("/pipeline");
+  revalidatePath("/leads");
+  revalidatePath("/settings/pipelines");
+  return updates;
+}
+
 export async function deleteStage(stageId: string) {
   await db.delete(stages).where(eq(stages.id, stageId));
   revalidatePath("/pipeline");
@@ -87,7 +129,16 @@ export async function deleteStage(stageId: string) {
 
 export async function createPipeline(name: string, type: "LEAD" | "DEAL") {
   const [pipeline] = await db.insert(pipelines).values({ name, type }).returning();
-  await db.insert(stages).values([{ pipelineId: pipeline.id, name: "New", order: 0 }]);
+  if (type === "LEAD") {
+    await db.insert(stages).values([
+      { pipelineId: pipeline.id, name: "New Contact", order: 0, color: "#3b82f6" },
+      { pipelineId: pipeline.id, name: "Contacted", order: 1, color: "#f59e0b" },
+      { pipelineId: pipeline.id, name: "Meeting Scheduled", order: 2, color: "#8b5cf6" },
+      { pipelineId: pipeline.id, name: "Qualified", order: 3, color: "#10b981" },
+    ]);
+  } else {
+    await db.insert(stages).values([{ pipelineId: pipeline.id, name: "New", order: 0 }]);
+  }
   revalidatePath("/pipeline");
   revalidatePath("/leads");
   revalidatePath("/settings/pipelines");
@@ -150,6 +201,18 @@ export async function deletePipeline(pipelineId: string) {
       .update(leads)
       .set({ pipelineId: fallbackPipeline.id, stageId: fallbackStageId })
       .where(eq(leads.pipelineId, pipelineId));
+  }
+
+  const targetStages = await db
+    .select({ id: stages.id })
+    .from(stages)
+    .where(eq(stages.pipelineId, pipelineId));
+  const targetStageIds = targetStages.map((stage) => stage.id);
+
+  if (targetStageIds.length > 0) {
+    await db
+      .delete(stageHistory)
+      .where(or(inArray(stageHistory.fromStageId, targetStageIds), inArray(stageHistory.toStageId, targetStageIds)));
   }
 
   // Delete stages of target pipeline
@@ -226,6 +289,10 @@ export async function updateLead(
 }
 
 export async function deleteLead(leadId: string) {
+  await db.delete(activities).where(eq(activities.leadId, leadId));
+  await db.delete(tasks).where(eq(tasks.leadId, leadId));
+  await db.delete(stageHistory).where(eq(stageHistory.leadId, leadId));
+  await db.delete(agentAuditLogs).where(eq(agentAuditLogs.leadId, leadId));
   await db.delete(leads).where(eq(leads.id, leadId));
   revalidatePath("/leads");
   revalidatePath("/");
@@ -1046,6 +1113,9 @@ export async function markTaskDone(taskId: string) {
 // Runs exactly once per click. Nothing here is scheduled or repeats on its own.
 
 export async function analyzeDeal(dealId: string) {
+  const session = await auth();
+  const userId = (session?.user as any)?.id as string | undefined;
+  const openai = await getOpenAiIntegration(userId);
   const deal = await db.query.deals.findFirst({
     where: eq(deals.id, dealId),
     with: { account: true, stage: true },
@@ -1066,7 +1136,7 @@ export async function analyzeDeal(dealId: string) {
   };
 
   let suggestionText: string;
-  if (!process.env.OPENAI_API_KEY) {
+  if (!openai.apiKey) {
     suggestionText =
       daysInStage > 7
         ? `This deal has been in ${signals.stage} for ${daysInStage} days with no logged movement. Call ${signals.account} directly rather than emailing again.`
@@ -1075,11 +1145,11 @@ export async function analyzeDeal(dealId: string) {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${openai.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: openai.settings.model === "dealnest-smart-local" ? "gpt-4o-mini" : openai.settings.model || "gpt-4o-mini",
         messages: [
           {
             role: "user",
@@ -1108,16 +1178,17 @@ export async function analyzeDeal(dealId: string) {
 
 export async function runAssistantCommand(command: string, ownerId?: string) {
   let plan: { action: string } = { action: "unknown" };
+  const openai = await getOpenAiIntegration(ownerId);
 
-  if (process.env.OPENAI_API_KEY) {
+  if (openai.apiKey) {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${openai.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: openai.settings.model === "dealnest-smart-local" ? "gpt-4o-mini" : openai.settings.model || "gpt-4o-mini",
         messages: [
           {
             role: "system",

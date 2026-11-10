@@ -3,10 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { meetings, contacts, Meeting, users } from "@/db/schema";
+import { meetings } from "@/db/schema";
 import { createId } from "@paralleldrive/cuid2";
 import { auth } from "@/auth";
-import { createCalendarEvent } from "@/lib/google";
 
 export async function createMeetingAction(formData: FormData) {
   const session = await auth();
@@ -22,7 +21,6 @@ export async function createMeetingAction(formData: FormData) {
   const endTimeStr = formData.get("endTime") as string; // HH:mm
   const location = (formData.get("location") as string) || "Google Meet";
   const color = (formData.get("color") as string) || "blue";
-  const syncGoogle = formData.get("syncGoogle") === "true";
 
   if (!title || !dateStr || !startTimeStr || !endTimeStr) {
     throw new Error("Title, date, start time, and end time are required.");
@@ -32,33 +30,6 @@ export async function createMeetingAction(formData: FormData) {
   const end = new Date(`${dateStr}T${endTimeStr}:00`);
 
   const meetingId = "meet_" + createId();
-  let googleEventId: string | null = null;
-
-  // If syncGoogle requested and user is authenticated
-  if (syncGoogle && currentUserId) {
-    let attendeeEmail: string | undefined;
-    if (contactId) {
-      const contact = await db.query.contacts.findFirst({
-        where: eq(contacts.id, contactId),
-      });
-      attendeeEmail = contact?.email || undefined;
-    }
-
-    try {
-      const gRes = await createCalendarEvent(currentUserId, {
-        summary: title,
-        description,
-        attendeeEmail,
-        startISO: start.toISOString(),
-        endISO: end.toISOString(),
-      });
-      if (gRes.ok && gRes.htmlLink) {
-        googleEventId = gRes.htmlLink;
-      }
-    } catch (e) {
-      console.warn("Google Calendar sync skipped/failed:", e);
-    }
-  }
 
   await db.insert(meetings).values({
     id: meetingId,
@@ -70,7 +41,7 @@ export async function createMeetingAction(formData: FormData) {
     contactId,
     dealId,
     userId: currentUserId,
-    googleEventId,
+    googleEventId: null,
     location,
     status: "SCHEDULED",
     color,
@@ -123,4 +94,3 @@ export async function deleteMeetingAction(id: string) {
   revalidatePath("/");
   return { success: true };
 }
-

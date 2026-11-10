@@ -715,9 +715,64 @@ type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+function getThemeCssVars(theme: ThemeConfig) {
+  const p = theme.palette;
+  const isDarkTheme = !!theme.isDark;
+  const sidebarIsDark = isDarkTheme || (theme.isGlass && theme.id !== "glass-frost");
+  const elevatedBg = isDarkTheme
+    ? (theme.id === "glass-obsidian" || p.bg === "#030712" ? "#0b0f19" :
+       theme.id === "glass-twilight" || p.bg === "#0f0728" ? "#190d36" :
+       theme.id === "glass-emerald" || p.bg === "#021a14" ? "#04241c" :
+       theme.id === "glass-ruby" || p.bg === "#1a050d" ? "#280a15" :
+       theme.id === "glass-navy" || p.bg === "#07152f" ? "#0d1b38" :
+       "#0f172a")
+    : "#ffffff";
+
+  return {
+    "--color-bg": p.bg,
+    "--color-surface": p.surface,
+    "--color-surface-2": p.surface2,
+    "--color-border": p.border,
+    "--color-border-strong": p.borderStrong,
+    "--color-brand": p.brand,
+    "--color-brand-hover": p.brandHover,
+    "--color-accent": p.accent,
+    "--color-accent-soft": p.accentSoft,
+    "--color-text": p.text,
+    "--color-text-muted": p.textMuted,
+    "--color-sidebar": p.sidebarBg,
+    "--color-sidebar-fg": sidebarIsDark ? "#ffffff" : "#0f172a",
+    "--color-sidebar-fg-muted": sidebarIsDark ? "rgba(255, 255, 255, 0.72)" : "#64748b",
+    "--color-sidebar-border": sidebarIsDark ? "rgba(255, 255, 255, 0.15)" : "#e2e8f0",
+    "--color-sidebar-item-hover": sidebarIsDark ? "rgba(255, 255, 255, 0.1)" : "rgba(15, 23, 42, 0.05)",
+    "--color-sidebar-active": p.sidebarActive,
+    "--color-sidebar-active-text": p.sidebarActiveText,
+    "--color-ink": isDarkTheme ? p.brand : "#0f172a",
+    "--color-ink-hover": isDarkTheme ? p.brandHover : "#1e293b",
+    "--color-ink-fg": isDarkTheme ? (p.sidebarActiveText || "#ffffff") : "#ffffff",
+    "--color-text-faint": isDarkTheme ? "rgba(255, 255, 255, 0.7)" : "#64748b",
+    "--color-surface-elevated": elevatedBg,
+    "--color-surface-elevated-hover": isDarkTheme ? "rgba(255, 255, 255, 0.12)" : "#f1f5f9",
+  };
+}
+
+function getInitialLocalStorageValue(key: string, fallback: string, validIds: string[]) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const saved = window.localStorage.getItem(key);
+    return saved && validIds.includes(saved) ? saved : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [activeThemeId, setActiveThemeId] = useState<string>("clinexa-blue");
-  const [activeFontComboId, setActiveFontComboId] = useState<string>("saas-modern");
+  const [activeThemeId, setActiveThemeId] = useState<string>(() =>
+    getInitialLocalStorageValue("mytm_active_theme", "clinexa-blue", THEMES.map((theme) => theme.id))
+  );
+  const [activeFontComboId, setActiveFontComboId] = useState<string>(() =>
+    getInitialLocalStorageValue("mytm_font_combo", "saas-modern", FONT_COMBINATIONS.map((combo) => combo.id))
+  );
   const [branding, setBranding] = useState<CompanyBranding>(DEFAULT_BRANDING);
 
   // Load saved preferences
@@ -744,47 +799,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Apply theme variables to root document
   useEffect(() => {
     const root = document.documentElement;
-    const p = currentTheme.palette;
-
-    root.style.setProperty("--color-bg", p.bg);
-    root.style.setProperty("--color-surface", p.surface);
-    root.style.setProperty("--color-surface-2", p.surface2);
-    root.style.setProperty("--color-border", p.border);
-    root.style.setProperty("--color-border-strong", p.borderStrong);
-    root.style.setProperty("--color-brand", p.brand);
-    root.style.setProperty("--color-brand-hover", p.brandHover);
-    root.style.setProperty("--color-accent", p.accent);
-    root.style.setProperty("--color-accent-soft", p.accentSoft);
-    root.style.setProperty("--color-text", p.text);
-    root.style.setProperty("--color-text-muted", p.textMuted);
+    const cssVars = getThemeCssVars(currentTheme);
     const isDarkTheme = !!currentTheme.isDark;
-    const sidebarIsDark = isDarkTheme || (currentTheme.isGlass && currentTheme.id !== "glass-frost");
 
-    root.style.setProperty("--color-sidebar", p.sidebarBg);
-    root.style.setProperty("--color-sidebar-fg", sidebarIsDark ? "#ffffff" : "#0f172a");
-    root.style.setProperty("--color-sidebar-fg-muted", sidebarIsDark ? "rgba(255, 255, 255, 0.72)" : "#64748b");
-    root.style.setProperty("--color-sidebar-border", sidebarIsDark ? "rgba(255, 255, 255, 0.15)" : "#e2e8f0");
-    root.style.setProperty("--color-sidebar-item-hover", sidebarIsDark ? "rgba(255, 255, 255, 0.1)" : "rgba(15, 23, 42, 0.05)");
-    root.style.setProperty("--color-sidebar-active", p.sidebarActive);
-    root.style.setProperty("--color-sidebar-active-text", p.sidebarActiveText);
-
-    root.style.setProperty("--color-ink", isDarkTheme ? p.brand : "#0f172a");
-    root.style.setProperty("--color-ink-hover", isDarkTheme ? p.brandHover : "#1e293b");
-    root.style.setProperty("--color-ink-fg", isDarkTheme ? (p.sidebarActiveText || "#ffffff") : "#ffffff");
-    root.style.setProperty("--color-text-faint", isDarkTheme ? "rgba(255, 255, 255, 0.7)" : "#64748b");
-
-    // Elevated opaque surface for dropdowns, popovers, context menus so background text never bleeds through
-    const elevatedBg = isDarkTheme
-      ? (currentTheme.id === "glass-obsidian" || p.bg === "#030712" ? "#0b0f19" :
-         currentTheme.id === "glass-twilight" || p.bg === "#0f0728" ? "#190d36" :
-         currentTheme.id === "glass-emerald" || p.bg === "#021a14" ? "#04241c" :
-         currentTheme.id === "glass-ruby" || p.bg === "#1a050d" ? "#280a15" :
-         currentTheme.id === "glass-navy" || p.bg === "#07152f" ? "#0d1b38" :
-         "#0f172a")
-      : "#ffffff";
-
-    root.style.setProperty("--color-surface-elevated", elevatedBg);
-    root.style.setProperty("--color-surface-elevated-hover", isDarkTheme ? "rgba(255, 255, 255, 0.12)" : "#f1f5f9");
+    Object.entries(cssVars).forEach(([key, value]) => root.style.setProperty(key, value));
 
     root.setAttribute("data-theme", currentTheme.id);
     root.setAttribute("data-glass", currentTheme.isGlass ? "true" : "false");
@@ -809,6 +827,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.style.setProperty("--font-sans", currentFontCombo.bodyFont);
     document.body.style.fontFamily = currentFontCombo.bodyFont;
   }, [currentFontCombo]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("mytm_theme_bootstrap", JSON.stringify({
+        themeId: currentTheme.id,
+        isDark: !!currentTheme.isDark,
+        isGlass: !!currentTheme.isGlass,
+        cssVars: getThemeCssVars(currentTheme),
+        headingFont: currentFontCombo.headingFont,
+        bodyFont: currentFontCombo.bodyFont,
+      }));
+    } catch (e) {}
+  }, [currentTheme, currentFontCombo]);
 
   function changeTheme(themeId: string) {
     setActiveThemeId(themeId);

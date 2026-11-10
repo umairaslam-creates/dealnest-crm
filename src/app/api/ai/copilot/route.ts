@@ -9,6 +9,17 @@ export async function POST(req: NextRequest) {
     const session = await auth();
     const userId = (session?.user as any)?.id;
 
+    if (!userId) {
+      return NextResponse.json(
+        {
+          reply: "Please sign in before asking Copilot to change CRM data.",
+          actionExecuted: "general_response",
+          error: "Unauthorized",
+        },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json();
     const { prompt } = body;
 

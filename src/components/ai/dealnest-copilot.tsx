@@ -18,6 +18,8 @@ import {
   Maximize2,
   Palette,
   Zap,
+  Paperclip,
+  FileSpreadsheet,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-context";
 import { CopilotResponse } from "@/lib/ai/copilot-engine";
@@ -36,15 +38,42 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+type ParsedUpload = {
+  fileName: string;
+  rows: Record<string, unknown>[];
+  columns: string[];
+  fieldMappings: Record<string, string>;
+};
+
 const INITIAL_SUGGESTIONS = [
   "What is our total pipeline summary?",
   "Create a $500k deal for Apex Cloud in Negotiation",
   "Create a hot lead for Sarah at Stripe with email sarah@stripe.com",
+  "Import this file as LEAP leads",
   "Show all hot leads in the CRM",
   "Move deal Apex Cloud to Won",
   "Switch theme to Obsidian Onyx",
   "Take me to the reports dashboard",
 ];
+
+function detectFieldMapping(header: string): string {
+  const h = header.trim().toLowerCase();
+  if (["name", "contact", "contact name", "full name", "lead name", "person"].includes(h)) return "contactName";
+  if (h.includes("designation") || h.includes("job") || h.includes("title") || h.includes("position") || h.includes("role")) return "title";
+  if (h.includes("company") || h.includes("account") || h.includes("organization") || h.includes("business")) return "company";
+  if (h.includes("website") || h.includes("url") || h.includes("domain") || h.includes("web")) return "website";
+  if (h.includes("email") || h.includes("mail")) return "email";
+  if (h.includes("phone") || h.includes("mobile") || h.includes("tel") || h.includes("whatsapp")) return "phone";
+  if (h.includes("value") || h.includes("budget") || h.includes("amount") || h.includes("revenue")) return "value";
+  if (h.includes("source") || h.includes("campaign") || h.includes("event") || h.includes("channel")) return "source";
+  if (h.includes("product") || h.includes("interest") || h.includes("service") || h.includes("solution")) return "productInterest";
+  if (h.includes("region") || h.includes("country") || h.includes("state") || h.includes("market")) return "region";
+  if (h.includes("city") || h.includes("location") || h.includes("town")) return "city";
+  if (h.includes("score") || h.includes("temperature") || h.includes("rating") || h.includes("priority")) return "score";
+  if (h.includes("tag") || h.includes("label")) return "tags";
+  if (h.includes("note") || h.includes("comment") || h.includes("description") || h.includes("remark")) return "notes";
+  return "skip";
+}
 
 export function DealNestCopilot() {
   const router = useRouter();
@@ -52,6 +81,8 @@ export function DealNestCopilot() {
   const [isOpen, setIsOpen] = useState(false);
   const [inputQuery, setInputQuery] = useState("");
   const [isPending, setIsPending] = useState(false);
+  const [upload, setUpload] = useState<ParsedUpload | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome-msg",
@@ -67,6 +98,7 @@ export function DealNestCopilot() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto scroll to latest message
   useEffect(() => {
@@ -96,12 +128,12 @@ export function DealNestCopilot() {
 
   async function handleSendMessage(textToSend?: string) {
     const query = (textToSend || inputQuery).trim();
-    if (!query || isPending) return;
+    if ((!query && !upload) || isPending) return;
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       sender: "user",
-      content: query,
+      content: upload ? `${query || "Import uploaded leads file"}\n\nAttached: ${upload.fileName}` : query,
       timestamp: new Date(),
     };
 
@@ -110,6 +142,42 @@ export function DealNestCopilot() {
     setIsPending(true);
 
     try {
+      if (upload) {
+        const res = await fetch("/api/ai/copilot/import-leads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: query,
+            fileName: upload.fileName,
+            rows: upload.rows,
+            fieldMappings: upload.fieldMappings,
+            selectedColumns: upload.columns,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to import uploaded leads.");
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `copilot-import-${Date.now()}`,
+            sender: "copilot",
+            content: data.reply || "Imported uploaded leads.",
+            actionExecuted: "import_leads_file",
+            badges: [
+              { label: `${data.imported} imported`, type: "success" },
+              ...(data.tags?.length ? [{ label: data.tags.join(", "), type: "info" as const }] : []),
+            ],
+            navigationPath: "/leads",
+            timestamp: new Date(),
+          },
+        ]);
+        setUpload(null);
+        router.refresh();
+        return;
+      }
+
       const res = await fetch("/api/ai/copilot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -152,6 +220,47 @@ export function DealNestCopilot() {
       ]);
     } finally {
       setIsPending(false);
+    }
+  }
+
+  async function handleFileSelected(file?: File | null) {
+    if (!file) return;
+    setUploadError(null);
+
+    try {
+      let rows: Record<string, unknown>[] = [];
+      if (file.name.toLowerCase().endsWith(".json")) {
+        const parsed = JSON.parse(await file.text());
+        rows = Array.isArray(parsed) ? parsed : parsed?.rows || parsed?.leads || parsed?.contacts || [];
+      } else {
+        const XLSX = await import("xlsx");
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = sheet ? XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" }) : [];
+      }
+
+      if (!rows.length) {
+        setUploadError("I could not find any rows in that file.");
+        return;
+      }
+
+      const columns = Array.from(
+        rows.slice(0, 50).reduce((set, row) => {
+          Object.keys(row).forEach((key) => key.trim() && set.add(key.trim()));
+          return set;
+        }, new Set<string>())
+      );
+
+      const fieldMappings = Object.fromEntries(columns.map((col) => [col, detectFieldMapping(col)]));
+      setUpload({ fileName: file.name, rows, columns, fieldMappings });
+
+      if (!inputQuery.trim()) {
+        setInputQuery("Import this spreadsheet as LEAP leads and label them LEAP Leads");
+      }
+    } catch (err: any) {
+      setUploadError(err.message || "Failed to read this file.");
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -350,19 +459,61 @@ export function DealNestCopilot() {
             }}
             className="p-3.5 sm:p-4 border-t border-white/[0.08] bg-[#0c0d16]"
           >
+            {(upload || uploadError) && (
+              <div className="mb-2 flex items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-3 py-2 text-[11.5px]">
+                {upload ? (
+                  <div className="flex min-w-0 items-center gap-2 text-slate-200">
+                    <FileSpreadsheet size={14} className="shrink-0 text-emerald-400" />
+                    <span className="truncate font-semibold">{upload.fileName}</span>
+                    <span className="shrink-0 rounded-md bg-emerald-500/15 px-1.5 py-0.5 font-bold text-emerald-300">
+                      {upload.rows.length} rows
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-rose-300">{uploadError}</div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUpload(null);
+                    setUploadError(null);
+                  }}
+                  className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+                  title="Remove upload"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            )}
             <div className="relative flex items-center">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls,.json"
+                className="hidden"
+                onChange={(e) => handleFileSelected(e.target.files?.[0])}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isPending}
+                className="absolute left-2 flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.09] hover:text-white disabled:opacity-40 transition-all cursor-pointer"
+                title="Attach Excel, CSV, or JSON leads file"
+              >
+                <Paperclip size={14} />
+              </button>
               <input
                 ref={inputRef}
                 type="text"
                 value={inputQuery}
                 onChange={(e) => setInputQuery(e.target.value)}
-                placeholder="Give DEALNEST Copilot any task..."
+                placeholder={upload ? "Tell me how to import it, e.g. label as LEAP Leads..." : "Give DEALNEST Copilot any task..."}
                 disabled={isPending}
-                className="w-full rounded-2xl border border-white/15 bg-white/[0.06] py-3 pl-4 pr-12 text-[13px] text-white placeholder:text-white/40 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 transition-all"
+                className="w-full rounded-2xl border border-white/15 bg-white/[0.06] py-3 pl-12 pr-12 text-[13px] text-white placeholder:text-white/40 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400 transition-all"
               />
               <button
                 type="submit"
-                disabled={!inputQuery.trim() || isPending}
+                disabled={(!inputQuery.trim() && !upload) || isPending}
                 className="absolute right-2 flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-amber-500 to-amber-400 text-slate-950 font-bold shadow-md hover:scale-105 active:scale-95 disabled:opacity-40 transition-all cursor-pointer"
                 title="Execute Command"
               >
@@ -382,4 +533,3 @@ export function DealNestCopilot() {
     </>
   );
 }
-

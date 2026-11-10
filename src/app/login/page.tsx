@@ -3,18 +3,14 @@
 import { useActionState, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { getProviders, signIn } from "next-auth/react";
 import { loginAction } from "./actions";
 import {
-  ArrowRight,
-  Sparkles,
-  ShieldCheck,
   Lock,
   Mail,
   Eye,
   EyeOff,
   X,
-  ChevronDown,
 } from "lucide-react";
 import { AuthShowcaseGlass } from "@/components/auth/auth-showcase-glass";
 import { DealNestLogo } from "@/components/brand/dealnest-logo";
@@ -22,9 +18,20 @@ import { DealNestLogo } from "@/components/brand/dealnest-logo";
 export default function LoginPage() {
   const router = useRouter();
   const [error, formAction, pending] = useActionState(loginAction, undefined);
-  const [email, setEmail] = useState("ahmad.aziz@mytm.co");
-  const [password, setPassword] = useState("mytm2026");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [socialError, setSocialError] = useState<string | null>(null);
+
+  async function handleGoogleSignIn() {
+    setSocialError(null);
+    const providers = await getProviders();
+    if (!providers?.google) {
+      setSocialError("Google sign-in is not configured yet. Add Google OAuth credentials in Vercel first.");
+      return;
+    }
+    await signIn("google", { callbackUrl: "/" });
+  }
 
   return (
     <div className="min-h-screen w-full relative bg-[#07080e] text-slate-100 font-sans flex flex-col justify-between overflow-x-hidden">
@@ -87,7 +94,7 @@ export default function LoginPage() {
             <div className="mb-5">
               <h1 className="text-[23px] font-bold tracking-tight text-white">Sign in to workspace</h1>
               <p className="text-[13px] text-white/60 mt-1">
-                Enter your credentials or use 1-click verified demo access.
+                Enter your workspace credentials to access your CRM.
               </p>
             </div>
 
@@ -125,11 +132,16 @@ export default function LoginPage() {
                 </button>
               </div>
 
-              {error && (
-                <div className="rounded-xl border border-rose-500/30 bg-rose-500/15 p-2.5 text-[12px] font-medium text-rose-300">
-                  {error}
-                </div>
-              )}
+            {error && (
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/15 p-2.5 text-[12px] font-medium text-rose-300">
+                {error}
+              </div>
+            )}
+            {socialError && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/15 p-2.5 text-[12px] font-medium text-amber-200">
+                {socialError}
+              </div>
+            )}
 
               {/* Solid Pure White Primary Button */}
               <button
@@ -153,7 +165,7 @@ export default function LoginPage() {
             {/* Social SSO Button (Google) */}
             <button
               type="button"
-              onClick={() => signIn("google", { callbackUrl: "/" })}
+              onClick={handleGoogleSignIn}
               className="w-full flex items-center justify-center gap-2.5 rounded-2xl border border-white/10 bg-white/[0.05] hover:bg-white/[0.09] py-3 px-4 text-[13px] font-semibold text-white transition-all cursor-pointer shadow-sm hover:border-white/20 mb-3"
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -175,19 +187,6 @@ export default function LoginPage() {
                 />
               </svg>
               <span>Continue with Google</span>
-            </button>
-
-            {/* Demo Credential Fill */}
-            <button
-              type="button"
-              onClick={() => {
-                setEmail("ahmad.aziz@mytm.co");
-                setPassword("mytm2026");
-              }}
-              className="w-full rounded-xl border border-white/10 bg-white/[0.05] hover:bg-white/[0.09] py-2.5 px-3 text-[12.5px] font-semibold text-white transition-all cursor-pointer flex items-center justify-center gap-2"
-            >
-              <Sparkles size={14} className="text-amber-400" />
-              <span>Fill Demo Credentials (Ahmad Aziz • Sales Lead)</span>
             </button>
 
             {/* Terms Disclaimer */}

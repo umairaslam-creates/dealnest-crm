@@ -218,6 +218,24 @@ export const googleTokens = pgTable("google_tokens", {
   connectedAt: timestamp("connected_at").notNull().defaultNow(),
 });
 
+export const userIntegrations = pgTable(
+  "user_integrations",
+  {
+    id: id(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    encryptedSecret: text("encrypted_secret"),
+    settings: text("settings"),
+    connectedAt: timestamp("connected_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    userProviderIdx: uniqueIndex("user_integrations_user_provider_idx").on(t.userId, t.provider),
+  })
+);
+
 // Every stage move (deal or lead) is logged here going forward, so real
 // historical trend lines (pipeline value at a past point in time, not just
 // "value of deals created that week") become possible once enough history
@@ -233,6 +251,18 @@ export const stageHistory = pgTable("stage_history", {
     .references(() => stages.id),
   value: doublePrecision("value"), // deal value at the time of the move, for trend math
   changedAt: timestamp("changed_at").notNull().defaultNow(),
+});
+
+// Internal Agent Control command audit trail.
+export const agentAuditLogs = pgTable("agent_audit_logs", {
+  id: id(),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  leadId: text("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+  actionType: text("action_type").notNull(),
+  previousValue: text("previous_value"),
+  newValue: text("new_value"),
+  source: text("source").notNull().default("agent_control"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // ---------- Relations (for query ergonomics) ----------
@@ -270,6 +300,7 @@ export const leadsRelations = relations(leads, ({ one, many }) => ({
   activities: many(activities),
   tasks: many(tasks),
   stageHistory: many(stageHistory),
+  agentAuditLogs: many(agentAuditLogs),
 }));
 
 export const accountsRelations = relations(accounts, ({ many }) => ({
@@ -309,6 +340,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   activities: many(activities),
   tasks: many(tasks),
   feedback: many(feedback),
+  integrations: many(userIntegrations),
+  agentAuditLogs: many(agentAuditLogs),
 }));
 
 export const feedbackRelations = relations(feedback, ({ one }) => ({
@@ -323,11 +356,20 @@ export const googleTokensRelations = relations(googleTokens, ({ one }) => ({
   user: one(users, { fields: [googleTokens.userId], references: [users.id] }),
 }));
 
+export const userIntegrationsRelations = relations(userIntegrations, ({ one }) => ({
+  user: one(users, { fields: [userIntegrations.userId], references: [users.id] }),
+}));
+
 export const stageHistoryRelations = relations(stageHistory, ({ one }) => ({
   deal: one(deals, { fields: [stageHistory.dealId], references: [deals.id] }),
   lead: one(leads, { fields: [stageHistory.leadId], references: [leads.id] }),
   fromStage: one(stages, { fields: [stageHistory.fromStageId], references: [stages.id] }),
   toStage: one(stages, { fields: [stageHistory.toStageId], references: [stages.id] }),
+}));
+
+export const agentAuditLogsRelations = relations(agentAuditLogs, ({ one }) => ({
+  user: one(users, { fields: [agentAuditLogs.userId], references: [users.id] }),
+  lead: one(leads, { fields: [agentAuditLogs.leadId], references: [leads.id] }),
 }));
 
 // ---------- Products & Solutions Catalog ----------
@@ -431,5 +473,3 @@ export const targetsRelations = relations(targets, ({ one }) => ({
 
 export type Target = typeof targets.$inferSelect;
 export type NewTarget = typeof targets.$inferInsert;
-
-

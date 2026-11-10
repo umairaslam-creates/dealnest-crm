@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useMemo, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
   Search,
@@ -40,6 +40,7 @@ import {
   updateLeadPipeline,
   bulkUpdateLeadPipeline,
   deleteLead,
+  reorderStages,
 } from "@/app/actions";
 import { ImportLeadsButton } from "./import-leads-button";
 import { ConvertLeadModal } from "./convert-lead-modal";
@@ -85,6 +86,43 @@ function formatDateShort(d: Date | string | null | undefined): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function summarizeText(value?: string | null, fallback = "") {
+  const cleaned = (value || "")
+    .replace(/\s+/g, " ")
+    .replace(/^AI Copilot moved lead/i, "Moved lead")
+    .trim();
+  if (!cleaned) return fallback;
+  return cleaned.length > 110 ? `${cleaned.slice(0, 107)}...` : cleaned;
+}
+
+function activityTypeLabel(type?: string | null) {
+  const label = (type || "NOTE").toLowerCase();
+  if (label === "meeting") return "meeting";
+  if (label === "call") return "call";
+  if (label === "email") return "email";
+  return "note";
+}
+
+function normalizeStageName(name?: string | null) {
+  const normalized = (name || "Unassigned").trim().toLowerCase().replace(/\s+/g, " ");
+  if (["new", "new contact", "new contacts"].includes(normalized)) return "new contact";
+  if (["meeting", "meetings", "meeting scheduled", "meetings scheduled"].includes(normalized)) {
+    return "meeting scheduled";
+  }
+  return normalized;
+}
+
+function displayStageName(name?: string | null) {
+  const normalized = normalizeStageName(name);
+  if (normalized === "new contact") return "New Contact";
+  if (normalized === "meeting scheduled") return "Meeting Scheduled";
+  return name?.trim() || "Unassigned";
+}
+
+function aggregateStageId(name?: string | null) {
+  return `all-stage:${normalizeStageName(name)}`;
+}
+
 export function LeadsClient({
   pipelines = [],
   leads = [],
@@ -99,12 +137,32 @@ export function LeadsClient({
   accounts?: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const [, startTransition] = useTransition();
 
   // Section / Campaign switcher state
   // "ALL" shows all leads across all pipelines; or string pipeline.id
-  const [activeSectionId, setActiveSectionId] = useState<string>("ALL");
+  const [activeSectionId, setActiveSectionId] = useState<string>(() => {
+    if (typeof window === "undefined") return "ALL";
+    const sectionFromUrl = new URLSearchParams(window.location.search).get("section");
+    if (sectionFromUrl) return sectionFromUrl;
+    try {
+      return localStorage.getItem("dealnest_active_lead_section") || "ALL";
+    } catch {
+      return "ALL";
+    }
+  });
+
+  function switchSection(sectionId: string) {
+    setActiveSectionId(sectionId);
+    setSelectedCardIds([]);
+    try {
+      localStorage.setItem("dealnest_active_lead_section", sectionId);
+      const nextUrl = sectionId === "ALL" ? "/leads" : `/leads?section=${encodeURIComponent(sectionId)}`;
+      window.history.replaceState(null, "", nextUrl);
+    } catch {}
+  }
 
   // Section creation modal
   const [sectionModalOpen, setSectionModalOpen] = useState(false);
@@ -142,6 +200,18 @@ export function LeadsClient({
       console.error("Failed to parse custom labels from localStorage", e);
     }
   }, []);
+
+  useEffect(() => {
+    const sectionFromUrl = searchParams.get("section");
+    let sectionToUse = sectionFromUrl || "";
+    try {
+      sectionToUse ||= localStorage.getItem("dealnest_active_lead_section") || "";
+    } catch {}
+
+    if (sectionToUse && sectionToUse !== "ALL" && pipelines.some((p) => p.id === sectionToUse)) {
+      setActiveSectionId(sectionToUse);
+    }
+  }, [pipelines, searchParams]);
 
   function saveCustomLabels(updated: CustomLabel[]) {
     setCustomLabels(updated);
@@ -210,6 +280,29 @@ export function LeadsClient({
 
   // Stages displayed on the Kanban board
   const boardStages: BoardStage[] = useMemo(() => {
+    if (activeSectionId === "ALL") {
+      const stageMap = new Map<string, BoardStage & { order: number }>();
+
+      for (const pipeline of pipelines) {
+        for (const stage of pipeline.stages) {
+          const key = normalizeStageName(stage.name);
+          const existing = stageMap.get(key);
+          if (!existing || stage.order < existing.order) {
+            stageMap.set(key, {
+              id: aggregateStageId(stage.name),
+              name: displayStageName(stage.name),
+              color: stage.color ?? existing?.color ?? "#6b6d72",
+              order: stage.order,
+            });
+          }
+        }
+      }
+
+      return Array.from(stageMap.values())
+        .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
+        .map(({ order, ...stage }) => stage);
+    }
+
     const p = activePipeline || defaultPipeline;
     if (!p) return [];
     return p.stages.map((s) => ({
@@ -217,7 +310,7 @@ export function LeadsClient({
       name: s.name,
       color: s.color ?? "#6b6d72",
     }));
-  }, [activePipeline, defaultPipeline]);
+  }, [activePipeline, defaultPipeline, activeSectionId, pipelines]);
 
   // Selected lead for detail drawer
   const selectedLead = useMemo(() => {
@@ -311,7 +404,10 @@ export function LeadsClient({
         });
       }
       if (l.stageHistory && Array.isArray(l.stageHistory)) {
-        for (const sh of l.stageHistory) {
+        const orderedStageHistory = [...l.stageHistory].sort(
+          (a: any, b: any) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime()
+        );
+        for (const sh of orderedStageHistory) {
           const sName = sh.toStage?.name || "Stage";
           if (
             dateHistory.length === 0 ||
@@ -344,15 +440,20 @@ export function LeadsClient({
         } catch {}
       }
 
-      // If active board doesn't contain this stageId (e.g. In "ALL" view across different pipelines),
-      // match by stage name or fallback to firstStageId so card is visible
       let effectiveStageId = l.stageId!;
-      if (!stageIdSet.has(effectiveStageId)) {
+      if (activeSectionId === "ALL") {
+        effectiveStageId = aggregateStageId(l.stage?.name);
+      } else if (!stageIdSet.has(effectiveStageId)) {
         const matchingByName = boardStages.find(
-          (bs) => bs.name.toLowerCase() === l.stage?.name?.toLowerCase()
+          (bs) => normalizeStageName(bs.name) === normalizeStageName(l.stage?.name)
         );
         effectiveStageId = matchingByName?.id || firstStageId;
       }
+
+      const latestActivity = Array.isArray(l.activities) ? l.activities[0] : null;
+      const nextTask = Array.isArray(l.tasks)
+        ? l.tasks.find((task: any) => !task.done) || null
+        : null;
 
       return {
         id: l.id,
@@ -362,7 +463,22 @@ export function LeadsClient({
             ? `${l.title} • ${l.company}`
             : l.title || l.company || "Individual Lead",
         stageId: effectiveStageId,
+        companyName: l.company || l.account?.name || null,
+        roleTitle: l.title || null,
         productName: l.productInterest || undefined,
+        lastInteraction: latestActivity
+          ? {
+              type: activityTypeLabel(latestActivity.type),
+              date: formatDateShort(latestActivity.occurredAt),
+              summary: summarizeText(latestActivity.notes, "Interaction logged."),
+            }
+          : null,
+        nextStep: nextTask
+          ? {
+              title: summarizeText(nextTask.title, "Follow up"),
+              dueDate: nextTask.dueDate ? formatDateShort(nextTask.dueDate) : null,
+            }
+          : null,
         owner: l.owner ? { id: l.owner.id, name: l.owner.name } : null,
         dateHistory: dateHistory.length > 0 ? dateHistory : undefined,
         tags: cardTags.length > 0 ? cardTags : undefined,
@@ -374,11 +490,11 @@ export function LeadsClient({
         tag: l.source
           ? { label: l.source, tone: (l.score as any) ?? "neutral" }
           : undefined,
-        href: `/leads/${l.id}`,
-        actionLabel: dealPipelines.length > 0 ? "Convert to deal" : undefined,
+        href: `/leads/${l.id}?fromSection=${encodeURIComponent(activeSectionId)}`,
+        actionLabel: dealPipelines.length > 0 ? "Move to Pipeline" : undefined,
       };
     });
-  }, [filteredLeads, boardStages, allAvailableLabels, dealPipelines.length, pipelines]);
+  }, [filteredLeads, boardStages, allAvailableLabels, dealPipelines.length, pipelines, activeSectionId]);
 
   // Selection handlers
   function toggleSelectCard(cardId: string) {
@@ -624,9 +740,31 @@ export function LeadsClient({
     try {
       await deleteLead(cardId);
       toast.success(`Lead "${lead.contactName}" deleted.`);
+      router.refresh();
     } catch (err: any) {
       toast.error(err.message || "Failed to delete lead.");
     }
+  }
+
+  function handleMoveLeadOnBoard(cardId: string, targetStageId: string) {
+    if (activeSectionId !== "ALL") {
+      startTransition(() => moveLeadStage(cardId, targetStageId));
+      return;
+    }
+
+    const lead = leads.find((l) => l.id === cardId);
+    const targetStage = boardStages.find((stage) => stage.id === targetStageId);
+    const pipeline = pipelines.find((p) => p.id === lead?.pipelineId);
+    const matchingStage = pipeline?.stages.find(
+      (stage) => normalizeStageName(stage.name) === normalizeStageName(targetStage?.name)
+    );
+
+    if (!lead || !targetStage || !matchingStage) {
+      toast.error("That stage does not exist in this lead's own section. Open the section to adjust its stages.");
+      return;
+    }
+
+    startTransition(() => moveLeadStage(cardId, matchingStage.id));
   }
 
   async function handleToggleLeadTag(cardId: string, tagName: string) {
@@ -662,7 +800,8 @@ export function LeadsClient({
 
           {/* "All Leads" Tab */}
           <button
-            onClick={() => setActiveSectionId("ALL")}
+            data-testid="section-tab-all"
+            onClick={() => switchSection("ALL")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
               activeSectionId === "ALL"
                 ? "bg-ink text-white shadow-sm"
@@ -693,8 +832,9 @@ export function LeadsClient({
             const count = leads.filter((l) => l.pipelineId === p.id).length;
             return (
               <div
+                data-testid={`section-tab-${p.id}`}
                 key={p.id}
-                onClick={() => setActiveSectionId(p.id)}
+                onClick={() => switchSection(p.id)}
                 className={`group/section relative flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
                   isSelected
                     ? "bg-ink text-white shadow-sm"
@@ -818,6 +958,7 @@ export function LeadsClient({
           <div className="relative flex-1 sm:w-60">
             <Search size={14} className="absolute left-3 top-2.5 text-text-faint" />
             <input
+              data-testid="lead-search-input"
               type="text"
               placeholder="Search leads, company, tags..."
               value={searchQuery}
@@ -1031,17 +1172,33 @@ export function LeadsClient({
           onToggleSelectCard={toggleSelectCard}
           members={members}
           onChangeOwner={handleRequestChangeOwner}
-          onMoveCard={(cardId, stageId) =>
-            startTransition(() => moveLeadStage(cardId, stageId))
-          }
+          onMoveCard={handleMoveLeadOnBoard}
           onRenameStage={(stageId, name) =>
-            startTransition(() => renameStage(stageId, name))
+            activeSectionId === "ALL"
+              ? toast.info("Open a specific section to rename its stages.")
+              : startTransition(() => renameStage(stageId, name))
           }
-          onAddStage={(name) =>
-            startTransition(() => addStage(activePipeline.id, name))
+          onAddStage={
+            activeSectionId === "ALL"
+              ? undefined
+              : (name) => startTransition(() => addStage(activePipeline.id, name))
+          }
+          onReorderStages={
+            activeSectionId === "ALL"
+              ? undefined
+              : (stageIds) =>
+                  startTransition(async () => {
+                    try {
+                      await reorderStages(stageIds);
+                      toast.success("Stage order saved.");
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to reorder stages.");
+                      router.refresh();
+                    }
+                  })
           }
           onCardClick={(cardId) => {
-            router.push(`/leads/${cardId}`);
+            router.push(`/leads/${cardId}?fromSection=${encodeURIComponent(activeSectionId)}`);
           }}
           onCardAction={(cardId) => {
             const lead = leads.find((l) => l.id === cardId);

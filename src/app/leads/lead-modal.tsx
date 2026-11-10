@@ -18,6 +18,17 @@ import {
 import { createLead, updateLead } from "@/app/actions";
 import { useToast } from "@/components/toast-context";
 
+const PRODUCT_INTEREST_PRESETS = [
+  "Payment Gateway",
+  "Smart POS Terminals",
+  "Core Banking API",
+  "Corporate Payroll",
+  "Payment Orchestration",
+  "Merchant Onboarding",
+  "Wallet Infrastructure",
+  "Custom Fintech",
+];
+
 export type LeadEntity = {
   id: string;
   contactName: string;
@@ -359,17 +370,21 @@ export function LeadModal({
               <label className="block text-[12.5px] font-medium text-text mb-1.5">
                 Product Interest
               </label>
-              <select
+              <input
+                list="lead-product-interest-presets"
                 value={productInterest}
                 onChange={(e) => setProductInterest(e.target.value)}
+                placeholder="Select or type any custom product/need"
                 className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-[13px] text-text outline-none focus:border-brand transition-all"
-              >
-                <option value="Payment Gateway">Payment Gateway</option>
-                <option value="POS Terminal">Smart POS Terminals</option>
-                <option value="Core Banking">Core Banking API</option>
-                <option value="Payroll Solution">Corporate Payroll</option>
-                <option value="Custom Fintech">Custom Fintech</option>
-              </select>
+              />
+              <datalist id="lead-product-interest-presets">
+                {PRODUCT_INTEREST_PRESETS.map((preset) => (
+                  <option key={preset} value={preset} />
+                ))}
+              </datalist>
+              <p className="mt-1 text-[10.5px] text-text-faint">
+                Pick a preset or type a custom product, solution, or requirement.
+              </p>
             </div>
 
             <div>
@@ -392,6 +407,7 @@ export function LeadModal({
                 Initial Stage
               </label>
               <select
+                data-testid="stage-selector"
                 value={stageId}
                 onChange={(e) => setStageId(e.target.value)}
                 className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-[13px] text-text outline-none focus:border-brand transition-all"
@@ -468,6 +484,7 @@ export function LeadModal({
               Cancel
             </button>
             <button
+              data-testid={leadToEdit ? "update-lead-button" : "save-lead-button"}
               type="submit"
               disabled={submitting}
               className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-[13px] font-bold shadow-md transition-all active:scale-[0.98]"
@@ -485,4 +502,3 @@ export function LeadModal({
     </div>
   );
 }
-

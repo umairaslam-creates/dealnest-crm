@@ -30,14 +30,17 @@ export default async function LeadsPage() {
         contact: true,
         stageHistory: {
           with: { toStage: true },
-          orderBy: (sh, { asc }) => asc(sh.changedAt),
+          orderBy: (sh, { desc }) => desc(sh.changedAt),
+          limit: 6,
         },
         activities: {
           orderBy: (a, { desc }) => desc(a.occurredAt),
           with: { user: true },
+          limit: 1,
         },
         tasks: {
           orderBy: (t, { asc }) => asc(t.dueDate),
+          limit: 5,
         },
       },
     }),
@@ -67,9 +70,10 @@ export default async function LeadsPage() {
       isDefault: true,
     }).returning();
     await db.insert(stages).values([
-      { pipelineId: created.id, name: "New", order: 0, color: "#3b82f6" },
+      { pipelineId: created.id, name: "New Contact", order: 0, color: "#3b82f6" },
       { pipelineId: created.id, name: "Contacted", order: 1, color: "#f59e0b" },
-      { pipelineId: created.id, name: "Qualified", order: 2, color: "#10b981" },
+      { pipelineId: created.id, name: "Meeting Scheduled", order: 2, color: "#8b5cf6" },
+      { pipelineId: created.id, name: "Qualified", order: 3, color: "#10b981" },
     ]);
     pipelinesList = await db.query.pipelines.findMany({
       where: eq(pipelines.type, "LEAD"),

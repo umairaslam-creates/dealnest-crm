@@ -20,11 +20,9 @@ import {
   Sparkles,
   Building,
   CalendarCheck,
-  RefreshCw,
 } from "lucide-react";
 import { useToast } from "@/components/toast-context";
 import { createMeetingAction, deleteMeetingAction } from "./actions";
-import { toggleGoogleConnectionAction, syncGoogleCalendarAction } from "@/app/actions/integrations";
 
 export type MeetingEntity = {
   id: string;
@@ -89,6 +87,31 @@ const COLOR_STYLES: Record<
 const HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17];
 const DAYS_OF_WEEK = ["MON", "TUE", "WED", "THU", "FRI"];
 
+function formatGoogleDate(value: Date | string) {
+  return new Date(value).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function googleCalendarUrl(meeting: MeetingEntity) {
+  const details = [
+    meeting.description,
+    meeting.contact?.name ? `Contact: ${meeting.contact.name}` : "",
+    meeting.contact?.account?.name ? `Account: ${meeting.contact.account.name}` : "",
+    meeting.deal?.title ? `Deal: ${meeting.deal.title}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: meeting.title,
+    dates: `${formatGoogleDate(meeting.startTime)}/${formatGoogleDate(meeting.endTime)}`,
+    details,
+    location: meeting.location || "Google Meet",
+  });
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 export function MeetingsClient({
   initialMeetings,
   contacts = [],
@@ -109,40 +132,12 @@ export function MeetingsClient({
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [contactSearch, setContactSearch] = useState("");
   const [viewMode, setViewMode] = useState<"day" | "week" | "month">("week");
-  const [calendarViewMode, setCalendarViewMode] = useState<"google" | "classic">(googleConnected ? "google" : "google");
-  const [isGoogleConnected, setIsGoogleConnected] = useState(googleConnected);
-  const [syncingCalendar, setSyncingCalendar] = useState(false);
+  const [calendarViewMode, setCalendarViewMode] = useState<"google" | "classic">("google");
 
   // Week navigation state
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [selectedMeeting, setSelectedMeeting] = useState<MeetingEntity | null>(null);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
-
-  async function handleToggleGoogleCalendar() {
-    const nextState = !isGoogleConnected;
-    const res = await toggleGoogleConnectionAction(nextState, googleEmail || "ahmad.aziz@mytm.co");
-    if (res.success) {
-      setIsGoogleConnected(nextState);
-      if (nextState) {
-        toast.success("Google Calendar connected and synchronized.");
-      } else {
-        toast.success("Google Calendar disconnected.");
-      }
-    } else {
-      toast.error(res.error || "Failed to update Google Calendar.");
-    }
-  }
-
-  async function handleSyncGoogleCalendar() {
-    setSyncingCalendar(true);
-    const res = await syncGoogleCalendarAction();
-    setSyncingCalendar(false);
-    if (res.success) {
-      toast.success(res.message || "Google Calendar synchronized.");
-    } else {
-      toast.error(res.error || "Calendar sync failed.");
-    }
-  }
 
   // Compute Monday of active week
   const monday = useMemo(() => {
@@ -247,32 +242,10 @@ export function MeetingsClient({
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Google Calendar Connection & Sync Controls */}
-          {isGoogleConnected ? (
-            <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300 shadow-2xs">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Google Calendar Synced</span>
-              <button
-                type="button"
-                onClick={handleSyncGoogleCalendar}
-                disabled={syncingCalendar}
-                className="ml-1 p-0.5 hover:text-emerald-900 rounded-full hover:bg-emerald-500/20 transition-all cursor-pointer"
-                title="Sync Google Calendar Now"
-              >
-                <RefreshCw size={12} className={syncingCalendar ? "animate-spin" : ""} />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleToggleGoogleCalendar}
-              className="flex items-center gap-1.5 rounded-full bg-white border border-slate-200 px-3 py-1 text-xs font-bold text-slate-700 hover:text-[#4361ee] hover:border-indigo-300 shadow-2xs transition-all cursor-pointer"
-              title="Connect Google Calendar"
-            >
-              <CalendarCheck size={13} className="text-[#4361ee]" />
-              <span>Connect Google Calendar</span>
-            </button>
-          )}
+          <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 rounded-full px-3 py-1 text-xs font-semibold text-[#4361ee] shadow-2xs">
+            <CalendarCheck size={13} />
+            <span>No-login Google add links</span>
+          </div>
 
           {/* Google Calendar Mode vs Classic CRM View Toggle */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-full border border-slate-200 dark:border-slate-700 text-xs font-medium">
@@ -508,7 +481,7 @@ export function MeetingsClient({
                                 </span>
                               </div>
 
-                              {(meeting.location === "Google Meet" || isGoogleConnected) && (
+                              {meeting.location === "Google Meet" && (
                                 <div className="flex items-center gap-1 mt-1 text-[9.5px] font-bold text-blue-600 dark:text-blue-400 bg-blue-100/80 dark:bg-blue-900/30 rounded-md px-1.5 py-0.5 w-fit">
                                   <Video size={10} />
                                   <span>Google Meet</span>
@@ -598,17 +571,17 @@ export function MeetingsClient({
                 </div>
               )}
 
-              {selectedMeeting.googleEventId && (
-                <a
-                  href={selectedMeeting.googleEventId}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1.5 text-xs text-[#4361ee] font-semibold hover:underline"
-                >
-                  <ExternalLink size={13} />
-                  <span>View in Google Calendar</span>
-                </a>
-              )}
+              <a
+                href={selectedMeeting.googleEventId || googleCalendarUrl(selectedMeeting)}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 text-xs text-[#4361ee] font-semibold hover:underline"
+              >
+                <ExternalLink size={13} />
+                <span>
+                  {selectedMeeting.googleEventId ? "View in Google Calendar" : "Add to Google Calendar"}
+                </span>
+              </a>
             </div>
 
             <div className="flex items-center justify-between pt-3 border-t border-slate-100">
@@ -645,11 +618,10 @@ export function MeetingsClient({
 
       {/* Schedule Meeting Modal */}
       {scheduleModalOpen && (
-        <ScheduleMeetingModal
-          contacts={contacts}
-          deals={deals}
-          googleConnected={googleConnected}
-          onClose={() => setScheduleModalOpen(false)}
+          <ScheduleMeetingModal
+            contacts={contacts}
+            deals={deals}
+            onClose={() => setScheduleModalOpen(false)}
           onCreated={(newMeeting) => {
             setMeetingsList((prev) => [...prev, newMeeting]);
             setScheduleModalOpen(false);
@@ -663,13 +635,11 @@ export function MeetingsClient({
 function ScheduleMeetingModal({
   contacts = [],
   deals = [],
-  googleConnected,
   onClose,
   onCreated,
 }: {
   contacts: any[];
   deals: any[];
-  googleConnected: boolean;
   onClose: () => void;
   onCreated: (meeting: MeetingEntity) => void;
 }) {
@@ -684,7 +654,6 @@ function ScheduleMeetingModal({
   const [startTime, setStartTime] = useState("10:00");
   const [endTime, setEndTime] = useState("10:45");
   const [color, setColor] = useState("blue");
-  const [syncGoogle, setSyncGoogle] = useState(googleConnected);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -703,7 +672,6 @@ function ScheduleMeetingModal({
       formData.append("startTime", startTime);
       formData.append("endTime", endTime);
       formData.append("color", color);
-      formData.append("syncGoogle", String(syncGoogle));
 
       try {
         const res = await createMeetingAction(formData);
@@ -883,25 +851,17 @@ function ScheduleMeetingModal({
             />
           </div>
 
-          {/* Google Calendar Sync Checkbox */}
           <div className="flex items-center justify-between rounded-2xl bg-indigo-50/70 border border-indigo-100 p-3">
             <div className="flex items-center gap-2">
               <CalendarCheck size={16} className="text-[#4361ee]" />
               <div>
-                <p className="text-xs font-bold text-slate-900">Sync with Google Calendar</p>
+                <p className="text-xs font-bold text-slate-900">Google Calendar ready</p>
                 <p className="text-[10.5px] text-slate-500">
-                  {googleConnected
-                    ? "Generates Google Meet link and sends calendar invitation"
-                    : "Will schedule locally (connect Google in Settings to sync)"}
+                  After saving, open the meeting and click Add to Google Calendar. No connection required.
                 </p>
               </div>
             </div>
-            <input
-              type="checkbox"
-              checked={syncGoogle}
-              onChange={(e) => setSyncGoogle(e.target.checked)}
-              className="h-4 w-4 rounded text-[#4361ee] focus:ring-indigo-500"
-            />
+            <CheckCircle2 size={18} className="text-emerald-500" />
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
@@ -925,4 +885,3 @@ function ScheduleMeetingModal({
     </div>
   );
 }
-

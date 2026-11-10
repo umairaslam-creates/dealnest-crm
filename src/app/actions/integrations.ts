@@ -2,9 +2,16 @@
 
 import { auth } from "@/auth";
 import { db } from "@/db/client";
-import { googleTokens, meetings, users, activities, contacts, deals } from "@/db/schema";
+import { meetings, activities } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { disconnectGoogle } from "@/lib/google";
+import {
+  getGoogleIntegrationSettings,
+  getHubSpotIntegration,
+  getOpenAiIntegration,
+  upsertUserIntegration,
+} from "@/lib/user-integrations";
 
 export type GoogleSettings = {
   calendarSync: boolean;
@@ -22,79 +29,23 @@ export type OpenAiSettings = {
   enableMeetingSummary: boolean;
 };
 
-// In-memory or fallback integration store for settings not yet in separate columns
-let cachedOpenAiSettings: OpenAiSettings = {
-  apiKey: process.env.OPENAI_API_KEY || "",
-  model: "gpt-4o",
-  temperature: 0.7,
-  enableCopilot: true,
-  enableScoring: true,
-  enableEmailWriter: true,
-  enableMeetingSummary: true,
-};
-
-let cachedGoogleSettings: GoogleSettings = {
-  calendarSync: true,
-  emailSync: true,
-  autoMeetLinks: true,
-};
-
-let cachedHubSpotToken: string = process.env.HUBSPOT_TOKEN || "";
+async function requireCurrentUserId() {
+  const session = await auth();
+  const userId = (session?.user as any)?.id;
+  if (!userId) throw new Error("Authentication required.");
+  return userId as string;
+}
 
 /**
  * Connect or disconnect Google Workspace account (Gmail & Google Calendar)
  */
-export async function toggleGoogleConnectionAction(connect: boolean, customEmail?: string) {
-  const session = await auth();
-  let userId = (session?.user as any)?.id;
-
-  if (!userId) {
-    const primaryUser = await db.query.users.findFirst();
-    userId = primaryUser?.id;
-  }
-
-  if (!userId) {
-    return { success: false, error: "Authentication required." };
-  }
-
+export async function toggleGoogleConnectionAction(connect: boolean, _customEmail?: string) {
   try {
+    const userId = await requireCurrentUserId();
     if (connect) {
-      const email = customEmail?.trim() || session?.user?.email || "ahmad.aziz@mytm.co";
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days mock/live session
-
-      const existing = await db.query.googleTokens.findFirst({
-        where: eq(googleTokens.userId, userId),
-      });
-
-      if (existing) {
-        await db
-          .update(googleTokens)
-          .set({
-            accessToken: "mock_google_oauth_access_token_" + Date.now(),
-            refreshToken: "mock_google_oauth_refresh_token_" + Date.now(),
-            googleEmail: email,
-            expiresAt,
-            connectedAt: new Date(),
-          })
-          .where(eq(googleTokens.userId, userId));
-      } else {
-        await db.insert(googleTokens).values({
-          userId,
-          accessToken: "mock_google_oauth_access_token_" + Date.now(),
-          refreshToken: "mock_google_oauth_refresh_token_" + Date.now(),
-          googleEmail: email,
-          expiresAt,
-          scope: "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.events",
-          connectedAt: new Date(),
-        });
-      }
-
-      revalidatePath("/settings/integrations");
-      revalidatePath("/meetings");
-      revalidatePath("/inbox");
-      return { success: true, connected: true, email };
+      return { success: true, redirectUrl: "/api/integrations/google/connect" };
     } else {
-      await db.delete(googleTokens).where(eq(googleTokens.userId, userId));
+      await disconnectGoogle(userId);
       revalidatePath("/settings/integrations");
       revalidatePath("/meetings");
       revalidatePath("/inbox");
@@ -110,39 +61,52 @@ export async function toggleGoogleConnectionAction(connect: boolean, customEmail
  * Save Google Workspace integration preferences
  */
 export async function saveGoogleIntegrationSettingsAction(settings: GoogleSettings) {
-  cachedGoogleSettings = { ...cachedGoogleSettings, ...settings };
+  const userId = await requireCurrentUserId();
+  await upsertUserIntegration({ userId, provider: "google", settings });
   revalidatePath("/settings/integrations");
   revalidatePath("/meetings");
   revalidatePath("/inbox");
-  return { success: true, settings: cachedGoogleSettings };
+  return { success: true, settings };
 }
 
 export async function getGoogleIntegrationSettingsAction() {
-  return { success: true, settings: cachedGoogleSettings };
+  const session = await auth();
+  const userId = (session?.user as any)?.id as string | undefined;
+  return { success: true, settings: await getGoogleIntegrationSettings(userId) };
 }
 
 /**
  * Save OpenAI API Key, Model selection, and feature flags
  */
 export async function saveOpenAiSettingsAction(settings: Partial<OpenAiSettings>) {
-  cachedOpenAiSettings = { ...cachedOpenAiSettings, ...settings };
-  if (settings.apiKey) {
-    process.env.OPENAI_API_KEY = settings.apiKey;
-  }
+  const userId = await requireCurrentUserId();
+  const existing = await getOpenAiIntegration(userId);
+  const nextSettings = {
+    ...existing.settings,
+    ...settings,
+    apiKey: undefined,
+  };
+  await upsertUserIntegration({
+    userId,
+    provider: "openai",
+    secret: settings.apiKey?.trim() || undefined,
+    settings: nextSettings,
+  });
   revalidatePath("/settings/integrations");
-  return { success: true, settings: cachedOpenAiSettings };
+  return { success: true, settings: nextSettings };
 }
 
 export async function getOpenAiSettingsAction() {
+  const session = await auth();
+  const userId = (session?.user as any)?.id as string | undefined;
+  const integration = await getOpenAiIntegration(userId);
   return {
     success: true,
     settings: {
-      ...cachedOpenAiSettings,
-      hasKey: Boolean(cachedOpenAiSettings.apiKey || process.env.OPENAI_API_KEY),
-      // Mask key for safety
-      maskedKey: cachedOpenAiSettings.apiKey
-        ? `${cachedOpenAiSettings.apiKey.slice(0, 7)}••••••••${cachedOpenAiSettings.apiKey.slice(-4)}`
-        : "",
+      ...integration.settings,
+      apiKey: "",
+      hasKey: Boolean(integration.apiKey),
+      maskedKey: integration.maskedKey,
     },
   };
 }
@@ -151,7 +115,10 @@ export async function getOpenAiSettingsAction() {
  * Test connection to OpenAI API
  */
 export async function testOpenAiConnectionAction(apiKey?: string, model: string = "gpt-4o") {
-  const keyToUse = apiKey?.trim() || cachedOpenAiSettings.apiKey || process.env.OPENAI_API_KEY;
+  const session = await auth();
+  const userId = (session?.user as any)?.id as string | undefined;
+  const integration = await getOpenAiIntegration(userId);
+  const keyToUse = apiKey?.trim() || integration.apiKey;
 
   if (!keyToUse) {
     return {
@@ -201,19 +168,20 @@ export async function testOpenAiConnectionAction(apiKey?: string, model: string 
  * Save HubSpot Private App Token
  */
 export async function saveHubSpotTokenAction(token: string) {
-  cachedHubSpotToken = token.trim();
-  process.env.HUBSPOT_TOKEN = cachedHubSpotToken;
+  const userId = await requireCurrentUserId();
+  await upsertUserIntegration({ userId, provider: "hubspot", secret: token.trim() });
   revalidatePath("/settings/integrations");
-  return { success: true, connected: Boolean(cachedHubSpotToken) };
+  return { success: true, connected: Boolean(token.trim()) };
 }
 
 export async function getHubSpotStatusAction() {
+  const session = await auth();
+  const userId = (session?.user as any)?.id as string | undefined;
+  const integration = await getHubSpotIntegration(userId);
   return {
     success: true,
-    connected: Boolean(cachedHubSpotToken || process.env.HUBSPOT_TOKEN),
-    maskedToken: cachedHubSpotToken
-      ? `${cachedHubSpotToken.slice(0, 6)}••••••••${cachedHubSpotToken.slice(-4)}`
-      : "",
+    connected: Boolean(integration.token),
+    maskedToken: integration.maskedToken,
   };
 }
 
@@ -221,15 +189,8 @@ export async function getHubSpotStatusAction() {
  * Sync Google Calendar events with DEALNEST meetings
  */
 export async function syncGoogleCalendarAction() {
-  const session = await auth();
-  let userId = (session?.user as any)?.id;
-
-  if (!userId) {
-    const primaryUser = await db.query.users.findFirst();
-    userId = primaryUser?.id;
-  }
-
   try {
+    await requireCurrentUserId();
     // Generate or refresh Google Meet links for meetings without them
     const existingMeetings = await db.query.meetings.findMany({
       where: eq(meetings.location, "Google Meet"),
@@ -260,13 +221,7 @@ export async function sendGmailEmailAction(data: {
   dealId?: string;
   contactId?: string;
 }) {
-  const session = await auth();
-  let userId = (session?.user as any)?.id;
-
-  if (!userId) {
-    const primaryUser = await db.query.users.findFirst();
-    userId = primaryUser?.id;
-  }
+  const userId = await requireCurrentUserId();
 
   try {
     // Log as activity in the CRM database

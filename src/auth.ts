@@ -1,71 +1,123 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
+import type { Provider } from "next-auth/providers";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { users } from "@/db/schema";
 import { authConfig } from "./auth.config";
 
+async function findOrCreateGoogleUser(input: { email?: string | null; name?: string | null; image?: string | null }) {
+  if (!input.email) return null;
+
+  const email = input.email.toLowerCase();
+  const existing = await db.query.users.findFirst({ where: eq(users.email, email) });
+  if (existing) {
+    if (input.image && !existing.image) {
+      const [updated] = await db
+        .update(users)
+        .set({ image: input.image })
+        .where(eq(users.id, existing.id))
+        .returning();
+      return updated ?? existing;
+    }
+    return existing;
+  }
+
+  const domain = email.split("@")[1] || null;
+  const [created] = await db
+    .insert(users)
+    .values({
+      email,
+      name: input.name || email.split("@")[0],
+      image: input.image,
+      accountType: "INDIVIDUAL",
+      status: "ACTIVE",
+      companyDomain: domain,
+      role: "REP",
+      orgRole: "REPRESENTATIVE",
+    })
+    .returning();
+  return created;
+}
+
+const providers: Provider[] = [
+  Credentials({
+    credentials: {
+      email: { label: "Email", type: "email" },
+      password: { label: "Password", type: "password" },
+    },
+    authorize: async (credentials) => {
+      const email = credentials?.email as string | undefined;
+      const password = credentials?.password as string | undefined;
+      if (!email || !password) return null;
+
+      const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+      if (!user?.passwordHash) return null;
+
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) return null;
+
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        accountType: user.accountType,
+        department: user.department,
+        orgRole: user.orgRole,
+        status: user.status,
+        companyDomain: user.companyDomain,
+        phone: user.phone,
+        designation: user.designation || user.occupation,
+        image: user.image,
+        permissions: user.permissions,
+        themePreference: user.themePreference,
+        fontPreference: user.fontPreference,
+      };
+    },
+  }),
+];
+
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  providers.push(
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    })
+  );
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
-  providers: [
-    Credentials({
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      authorize: async (credentials) => {
-        const email = credentials?.email as string | undefined;
-        const password = credentials?.password as string | undefined;
-        if (!email || !password) return null;
-
-        const user = await db.query.users.findFirst({ where: eq(users.email, email) });
-        if (!user?.passwordHash) return null;
-
-        const valid = await bcrypt.compare(password, user.passwordHash);
-        if (!valid) return null;
-
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          accountType: user.accountType,
-          department: user.department,
-          orgRole: user.orgRole,
-          status: user.status,
-          companyDomain: user.companyDomain,
-          phone: user.phone,
-          designation: user.designation || user.occupation,
-          image: user.image,
-          permissions: user.permissions,
-          themePreference: user.themePreference,
-          fontPreference: user.fontPreference,
-        };
-      },
-    }),
-  ],
+  providers,
   callbacks: {
     ...authConfig.callbacks,
     jwt: async ({ token, user }) => {
       if (user) {
-        token.id = (user as any).id;
-        token.role = (user as any).role;
-        token.accountType = (user as any).accountType;
-        token.department = (user as any).department;
-        token.orgRole = (user as any).orgRole;
-        token.status = (user as any).status;
-        token.companyDomain = (user as any).companyDomain;
-        token.phone = (user as any).phone;
-        token.designation = (user as any).designation || (user as any).occupation;
+        const dbUser =
+          (user as any).role && (user as any).accountType
+            ? (user as any)
+            : await findOrCreateGoogleUser({ email: user.email, name: user.name, image: user.image });
+
+        token.id = dbUser?.id || (user as any).id;
+        token.role = dbUser?.role;
+        token.accountType = dbUser?.accountType;
+        token.department = dbUser?.department;
+        token.orgRole = dbUser?.orgRole;
+        token.status = dbUser?.status;
+        token.companyDomain = dbUser?.companyDomain;
+        token.phone = dbUser?.phone;
+        token.designation = dbUser?.designation || dbUser?.occupation;
         // Keep JWT cookie light: only store if lightweight string/URL, not huge base64
         token.image =
-          typeof (user as any).image === "string" && (user as any).image.length < 500
-            ? (user as any).image
+          typeof dbUser?.image === "string" && dbUser.image.length < 500
+            ? dbUser.image
             : null;
-        token.permissions = (user as any).permissions;
-        token.themePreference = (user as any).themePreference;
-        token.fontPreference = (user as any).fontPreference;
+        token.permissions = dbUser?.permissions;
+        token.themePreference = dbUser?.themePreference;
+        token.fontPreference = dbUser?.fontPreference;
       }
       return token;
     },

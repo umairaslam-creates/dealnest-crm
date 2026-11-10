@@ -1,6 +1,6 @@
 import { db } from "@/db/client";
 import { eq, asc, desc } from "drizzle-orm";
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { getSessionUser } from "@/lib/current-user";
 import { leads, pipelines, stages, tasks, activities, products, users, accounts } from "@/db/schema";
@@ -10,10 +10,13 @@ export const dynamic = "force-dynamic";
 
 export default async function LeadDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ fromSection?: string }>;
 }) {
   const { id } = await params;
+  const { fromSection } = await searchParams;
   const user = await getSessionUser();
 
   const lead = await db.query.leads.findFirst({
@@ -41,7 +44,7 @@ export default async function LeadDetailPage({
   });
 
   if (!lead) {
-    notFound();
+    redirect(fromSection ? `/leads?section=${encodeURIComponent(fromSection)}` : "/leads");
   }
 
   // Fetch deal pipelines for conversion

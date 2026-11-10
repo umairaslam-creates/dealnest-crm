@@ -31,6 +31,7 @@ import {
   bulkUpdateDealOwners,
   updateDealPipeline,
   deleteDeal,
+  reorderStages,
 } from "@/app/actions";
 import { DealModal } from "@/components/deal-modal";
 import { useToast } from "@/components/toast-context";
@@ -551,6 +552,17 @@ export function PipelineClient({
           onAddStage={(name) => {
             startTransition(async () => {
               await addStage(active.id, name);
+            });
+          }}
+          onReorderStages={(stageIds) => {
+            startTransition(async () => {
+              try {
+                await reorderStages(stageIds);
+                toast.success("Stage order saved.");
+              } catch (err: any) {
+                toast.error(err.message || "Failed to reorder stages.");
+                router.refresh();
+              }
             });
           }}
           onCardClick={(cardId) => {

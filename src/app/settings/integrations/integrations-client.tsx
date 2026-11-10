@@ -110,6 +110,10 @@ export function IntegrationsClient({
   async function handleToggleGoogle(connect: boolean) {
     startTransition(async () => {
       const res = await toggleGoogleConnectionAction(connect, googleEmail);
+      if ((res as any).redirectUrl) {
+        window.location.href = (res as any).redirectUrl;
+        return;
+      }
       if (res.success) {
         setGoogleConnected(connect);
         if (connect) {
@@ -462,7 +466,7 @@ export function IntegrationsClient({
               </div>
             </div>
             <p className="text-[11px] text-text-faint mt-1">
-              Your key is securely stored in your local environment and used only when you trigger AI actions.
+              Your key is encrypted for your user account and used only when you trigger AI actions.
             </p>
           </div>
 
